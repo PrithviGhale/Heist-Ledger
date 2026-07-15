@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\GTAEarningsTracker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\tessdata\eng.traineddata"
+          Link="tessdata\eng.traineddata"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\TestSamples\GtaTotalCashEarnedReference.png"
+          Link="TestSamples\GtaTotalCashEarnedReference.png"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\..\Assets\TestSamples\GtaTotalCashEarnedReference.png')" />
+    <None Include="..\..\Assets\TestSamples\GtaAmountMisread_1818663.png"
+          Link="TestSamples\GtaAmountMisread_1818663.png"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\..\Assets\TestSamples\GtaAmountMisread_1818663.png')" />
+    <None Include="..\..\Assets\test 1.png" Link="TestSamples\UserTest1.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\test 2.png" Link="TestSamples\UserTest2.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\test 3.png" Link="TestSamples\UserTest3.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\test 4.png" Link="TestSamples\UserTest4.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\test 5.png" Link="TestSamples\UserTest5.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

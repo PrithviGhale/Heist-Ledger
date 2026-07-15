@@ -1,0 +1,32 @@
+# Build output
+bin/
+obj/
+artifacts/
+publish/
+
+# IDE and local tooling
+.vs/
+.vscode/
+.idea/
+.agents/
+.codex/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test output
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Local runtime files and logs
+*.log
+*.tmp
+*.dmp
+
+# Windows and macOS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store

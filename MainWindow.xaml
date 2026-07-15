@@ -1,0 +1,1369 @@
+<Window x:Class="GTAEarningsTracker.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GTA Earnings Tracker"
+        Icon="Assets/AppIcon.ico"
+        Width="500"
+        Height="760"
+        MinWidth="460"
+        MinHeight="650"
+        MaxWidth="560"
+        SizeToContent="Manual"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="True"
+        SourceInitialized="Window_SourceInitialized"
+        Loaded="Window_Loaded"
+        LocationChanged="Window_LocationChanged"
+        SizeChanged="Window_SizeChanged"
+        StateChanged="Window_StateChanged"
+        Closed="Window_Closed"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Border x:Name="WindowChrome"
+            Margin="8"
+            Background="{DynamicResource DashboardBackgroundBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="18"
+            ClipToBounds="True">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24"
+                              ShadowDepth="5"
+                              Opacity="0.48"
+                              Color="#FF000000" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="58" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid x:Name="FixedTitleBar"
+                  Grid.Row="0"
+                  Margin="20,0,16,0"
+                  Background="Transparent"
+                  MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Image Width="30"
+                       Height="30"
+                       VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality"
+                       Source="Assets/AppIcon.png"
+                       Stretch="Uniform"
+                       ToolTip="HEIST LEDGER" />
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="HEIST LEDGER" />
+                    <TextBlock x:Name="ExpandedTitleSubtitle"
+                               Margin="0,2,0,0"
+                               Foreground="{DynamicResource EarningsGreenBrush}"
+                               FontSize="8"
+                               FontWeight="SemiBold"
+                               Text="EARNINGS INTELLIGENCE" />
+                    <StackPanel x:Name="CompactTitleScannerPanel"
+                                Visibility="Collapsed"
+                                Margin="0,2,0,0"
+                                Orientation="Horizontal">
+                        <Ellipse x:Name="CompactLiveScannerDot"
+                                 Width="6"
+                                 Height="6"
+                                 Fill="{DynamicResource MutedTextBrush}" />
+                        <TextBlock x:Name="CompactScannerStatusText"
+                                   Margin="5,0,0,0"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="9"
+                                   Text="Scanner idle" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="CompactModeTitleButton"
+                            Style="{DynamicResource IconButton}"
+                            Content="▣"
+                            ToolTip="Switch to compact overlay"
+                            Click="CompactModeButton_Click" />
+                    <Button x:Name="ExpandedModeTitleButton"
+                            Visibility="Collapsed"
+                            Style="{DynamicResource IconButton}"
+                            Content="□"
+                            ToolTip="Return to expanded dashboard"
+                            Click="ExpandedModeButton_Click" />
+                    <Button Style="{DynamicResource IconButton}"
+                            Content="—"
+                            ToolTip="Minimize"
+                            Click="MinimizeButton_Click" />
+                    <Button Style="{DynamicResource IconButton}"
+                            Foreground="{DynamicResource ErrorRedBrush}"
+                            Content="×"
+                            ToolTip="Close"
+                            Click="CloseButton_Click" />
+                </StackPanel>
+            </Grid>
+
+            <Border x:Name="NavigationBar"
+                    Grid.Row="1"
+                    Margin="20,0,20,8"
+                    Padding="3"
+                    Background="{DynamicResource SecondaryBackgroundBrush}"
+                    BorderBrush="{DynamicResource MutedBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="11">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="DashboardTabButton"
+                            Style="{DynamicResource NavigationTabButtonActive}"
+                            Content="DASHBOARD"
+                            Click="DashboardTabButton_Click" />
+                    <Button x:Name="SettingsTabButton"
+                            Grid.Column="1"
+                            Style="{DynamicResource NavigationTabButton}"
+                            Content="SETTINGS"
+                            Click="SettingsTabButton_Click" />
+                </Grid>
+            </Border>
+
+            <Grid x:Name="ExpandedDashboard" Grid.Row="2" RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <TranslateTransform X="0" />
+                </Grid.RenderTransform>
+                <ScrollViewer x:Name="MainScrollViewer"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto"
+                              PanningMode="VerticalOnly"
+                              RenderTransformOrigin="0.5,0.5">
+                    <ScrollViewer.RenderTransform>
+                        <TranslateTransform X="0" />
+                    </ScrollViewer.RenderTransform>
+                    <StackPanel Margin="20,0,20,22">
+                        <Grid Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{DynamicResource StatusPill}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse x:Name="LiveScannerDot" Width="8" Height="8" Fill="{DynamicResource MutedTextBrush}" />
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="QUICK SCAN" />
+                                        <TextBlock x:Name="LiveScannerStatusText" Margin="0,2,0,0" FontSize="10" Text="Select area" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Column="2" Style="{DynamicResource StatusPill}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse x:Name="OcrReadyDot" Width="8" Height="8" Fill="{DynamicResource MutedTextBrush}" />
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="OCR ENGINE" />
+                                        <TextBlock x:Name="OcrReadyStatusText" Margin="0,2,0,0" FontSize="10" Text="Standby" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Column="4" Style="{DynamicResource StatusPill}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse x:Name="CaptureAreaDot" Width="8" Height="8" Fill="{DynamicResource WarningGoldBrush}" />
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="CAPTURE AREA" />
+                                        <TextBlock x:Name="CaptureAreaStatusText" Margin="0,2,0,0" FontSize="10" Text="Not set" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Border Margin="0,12,0,0"
+                                Padding="14"
+                                Background="{DynamicResource AccentSurfaceBrush}"
+                                BorderBrush="{DynamicResource AccentBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="13">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="1.35*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="SELECTED PAYOUT AREA" />
+                                    <TextBlock x:Name="QuickCaptureStatusText"
+                                               Margin="0,4,0,0"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="10"
+                                               Text="Scan the selected payout area"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button x:Name="QuickCaptureButton"
+                                        Grid.Column="2"
+                                        Height="44"
+                                        Style="{DynamicResource PrimaryButton}"
+                                        Content="QUICK SCAN"
+                                        Click="QuickCaptureButton_Click" />
+                            </Grid>
+                        </Border>
+
+                        <Border Margin="0,14,0,0"
+                                Padding="19"
+                                Background="{DynamicResource HeroCardBrush}"
+                                BorderBrush="{DynamicResource AccentBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="15">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="LAST 24 HOURS" />
+                                <TextBlock x:Name="DayTotalText"
+                                           Margin="0,5,0,0"
+                                           Foreground="{DynamicResource EarningsGreenBrush}"
+                                           FontFamily="Segoe UI Variable Display, Segoe UI"
+                                           FontSize="42"
+                                           FontWeight="SemiBold"
+                                           Text="$0"
+                                           TextTrimming="CharacterEllipsis" />
+                                <Border Height="2"
+                                        Margin="0,10,0,12"
+                                        Background="{DynamicResource DarkGreenBrush}"
+                                        CornerRadius="1"
+                                        Opacity="0.7" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="11"
+                                               Text="Rolling 24-hour earnings" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <TextBlock Foreground="{DynamicResource MutedTextBrush}" FontSize="11" Text="Last payout  " />
+                                        <TextBlock x:Name="HeroLastPayoutText" FontSize="11" FontWeight="SemiBold" Text="$0" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{DynamicResource Card}">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock Style="{DynamicResource MicroLabel}" Text="7 DAY TOTAL" />
+                                        <TextBlock HorizontalAlignment="Right" Foreground="{DynamicResource ScannerCyanBrush}" FontSize="13" Text="▥" />
+                                    </Grid>
+                                    <TextBlock x:Name="WeekTotalText"
+                                               Margin="0,8,0,0"
+                                               FontSize="22"
+                                               FontWeight="SemiBold"
+                                               Text="$0"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Margin="0,5,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="Trailing seven days" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Style="{DynamicResource Card}">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock Style="{DynamicResource MicroLabel}" Text="LAST PAYOUT" />
+                                        <Ellipse Width="7" Height="7" HorizontalAlignment="Right" Fill="{DynamicResource EarningsGreenBrush}" />
+                                    </Grid>
+                                    <TextBlock x:Name="LastPayoutText"
+                                               Margin="0,8,0,0"
+                                               FontSize="22"
+                                               FontWeight="SemiBold"
+                                               Text="$0"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="LastPayoutTimestampText"
+                                               Margin="0,5,0,0"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="10"
+                                               Text="No transactions yet" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="WEEKLY EARNINGS" />
+                                    <TextBlock HorizontalAlignment="Right" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="LAST 7 CALENDAR DAYS" />
+                                </Grid>
+                                <ItemsControl x:Name="WeeklyChartItems" Margin="0,10,0,0">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Rows="1" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Height="108" Margin="4,0">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="*" />
+                                                    <RowDefinition Height="22" />
+                                                </Grid.RowDefinitions>
+                                                <Border Grid.Row="0"
+                                                        Width="22"
+                                                        Height="{Binding BarHeight}"
+                                                        VerticalAlignment="Bottom"
+                                                        Background="{DynamicResource EarningsGreenBrush}"
+                                                        CornerRadius="5,5,2,2"
+                                                        Opacity="{Binding Opacity}"
+                                                        ToolTip="{Binding AmountText}" />
+                                                <TextBlock Grid.Row="1"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Bottom"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                                           FontSize="10"
+                                                           Text="{Binding DayLabel}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="ManualEntryCard"
+                                Visibility="Collapsed"
+                                Margin="0,12,0,0"
+                                Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="ADD TRANSACTION" />
+                                <Grid Height="46" Margin="0,10,0,0">
+                                    <Border Background="{DynamicResource SecondaryBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="42" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0"
+                                                Margin="1"
+                                                Background="#121A2531"
+                                                BorderBrush="{DynamicResource MutedBorderBrush}"
+                                                BorderThickness="0,0,1,0"
+                                                CornerRadius="9,0,0,9">
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource EarningsGreenBrush}"
+                                                       FontSize="17"
+                                                       FontWeight="SemiBold"
+                                                       Text="$" />
+                                        </Border>
+                                        <TextBox x:Name="AmountTextBox"
+                                                 Grid.Column="1"
+                                                 Padding="12,0"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 CaretBrush="{DynamicResource PrimaryTextBrush}"
+                                                 Foreground="{DynamicResource PrimaryTextBrush}"
+                                                 FontFamily="Segoe UI Variable Text, Segoe UI"
+                                                 FontSize="15"
+                                                 MaxLength="24"
+                                                 VerticalContentAlignment="Center"
+                                                 ToolTip="Examples: 500000, 500,000, or $500,000"
+                                                 TextChanged="AmountTextBox_TextChanged"
+                                                 KeyDown="AmountTextBox_KeyDown" />
+                                        <TextBlock x:Name="AmountPlaceholderText"
+                                                   Grid.Column="1"
+                                                   Margin="13,0"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="12"
+                                                   IsHitTestVisible="False"
+                                                   Text="Enter payout amount"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </Grid>
+
+                                <TextBlock x:Name="ValidationText"
+                                           MinHeight="14"
+                                           Margin="2,6,2,0"
+                                           Foreground="{DynamicResource ErrorRedBrush}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap" />
+
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="1.5*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="AddEarningButton"
+                                            Grid.Column="0"
+                                            Style="{DynamicResource PrimaryButton}"
+                                            Content="Add Earning"
+                                            Click="AddEarningButton_Click" />
+                                    <Button x:Name="UndoLastButton"
+                                            Grid.Column="2"
+                                            Style="{DynamicResource SecondaryButton}"
+                                            Content="Undo Last"
+                                            IsEnabled="False"
+                                            Click="UndoLastButton_Click" />
+                                </Grid>
+
+                                <Grid Margin="2,11,2,0">
+                                    <TextBlock Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="Transactions saved locally" />
+                                    <TextBlock x:Name="LastUpdatedText"
+                                               HorizontalAlignment="Right"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="10"
+                                               Text="Last updated: --" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="RECENT ACTIVITY" />
+                                    <Button x:Name="RecentUndoButton"
+                                            Height="28"
+                                            Padding="10,0"
+                                            HorizontalAlignment="Right"
+                                            Style="{DynamicResource GhostButton}"
+                                            Content="Undo Last"
+                                            Click="UndoLastButton_Click" />
+                                </Grid>
+                                <ItemsControl x:Name="RecentActivityItems" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid MinHeight="43">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="30" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Ellipse Width="22" Height="22" Fill="#1FA6FF5F" Stroke="#55A6FF5F" StrokeThickness="1" />
+                                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource EarningsGreenBrush}" FontSize="11" Text="+" />
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock FontSize="11" FontWeight="SemiBold" Text="{Binding SourceLabel}" />
+                                                    <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" Text="{Binding LocalTimeText}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="2"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource EarningsGreenBrush}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding AmountText}" />
+                                                <Border Grid.ColumnSpan="3"
+                                                        Height="1"
+                                                        VerticalAlignment="Bottom"
+                                                        Background="{DynamicResource MutedBorderBrush}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="NoRecentActivityText"
+                                           Margin="0,8,0,0"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="11"
+                                           Text="No confirmed earnings yet." />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <Expander x:Name="PayoutScannerExpander"
+                                      Style="{DynamicResource PremiumExpander}">
+                                <Expander.Header>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{DynamicResource MicroLabel}" Foreground="{DynamicResource ScannerCyanBrush}" Text="PAYOUT SCANNER" />
+                                            <TextBlock x:Name="ScannerCollapsedStatusText"
+                                                       Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="10"
+                                                       Text="Idle • No capture area" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1"
+                                                Width="30"
+                                                Height="30"
+                                                Background="{DynamicResource SecondaryBackgroundBrush}"
+                                                BorderBrush="{DynamicResource MutedBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8">
+                                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="14" Text="⌄" />
+                                        </Border>
+                                    </Grid>
+                                </Expander.Header>
+
+                                <StackPanel Margin="0,16,0,0">
+                                    <TextBlock x:Name="CaptureAreaText"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="10"
+                                               Text="Capture area: Not selected"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,5,0,0"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="9"
+                                               Text="Select the complete TOTAL CASH EARNED heading and the full amount below it. Leave a small border around both lines."
+                                               TextWrapping="Wrap" />
+
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.35*" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="SelectCaptureAreaButton"
+                                                Grid.Column="0"
+                                                Style="{DynamicResource SecondaryButton}"
+                                                Content="CHANGE CAPTURE AREA"
+                                                Click="SelectCaptureAreaButton_Click" />
+                                        <Button x:Name="TestCaptureButton"
+                                                Grid.Column="2"
+                                                Style="{DynamicResource GhostButton}"
+                                                Content="Test Capture"
+                                                Click="TestCaptureButton_Click" />
+                                        <Button x:Name="ClearCaptureAreaButton"
+                                                Grid.Column="4"
+                                                Style="{DynamicResource DangerButton}"
+                                                Content="Clear"
+                                                Click="ClearCaptureAreaButton_Click" />
+                                    </Grid>
+
+                                    <Grid Margin="2,12,2,0">
+                                        <CheckBox x:Name="LivePreviewCheckBox"
+                                                  Style="{DynamicResource ToggleSwitch}"
+                                                  Content="Live Preview"
+                                                  Checked="LivePreviewCheckBox_Checked"
+                                                  Unchecked="LivePreviewCheckBox_Unchecked" />
+                                    </Grid>
+
+                                    <Border Height="150"
+                                            MaxHeight="180"
+                                            Margin="0,12,0,0"
+                                            Background="#FF090D12"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="11"
+                                            ClipToBounds="True">
+                                        <Grid>
+                                            <Image x:Name="CapturePreviewImage"
+                                                   Margin="6"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                   Stretch="Uniform" />
+                                            <TextBlock x:Name="CapturePreviewPlaceholderText"
+                                                       Margin="20"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
+                                                       FontSize="11"
+                                                       IsHitTestVisible="False"
+                                                       Text="Capture preview will appear here"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="Wrap" />
+                                        </Grid>
+                                    </Border>
+
+                                    <TextBlock x:Name="CaptureStatusText"
+                                               MinHeight="14"
+                                               Margin="2,7,2,0"
+                                               Foreground="{DynamicResource ScannerCyanBrush}"
+                                               FontSize="10"
+                                               TextWrapping="Wrap" />
+
+                                    <Border Height="1" Margin="0,13,0,0" Background="{DynamicResource MutedBorderBrush}" />
+
+                                    <Button x:Name="AnalyzeCaptureButton"
+                                            Style="{DynamicResource PrimaryButton}"
+                                            Content="Analyze Current Capture"
+                                            Click="AnalyzeCaptureButton_Click" />
+
+                                    <CheckBox x:Name="AutomaticDetectionCheckBox"
+                                              Visibility="Collapsed"
+                                              Margin="2,12,2,0"
+                                              Style="{DynamicResource ToggleSwitch}"
+                                              Content=""
+                                              Checked="AutomaticDetectionCheckBox_Checked"
+                                              Unchecked="AutomaticDetectionCheckBox_Unchecked" />
+
+                                    <TextBlock x:Name="OcrStatusText"
+                                               MinHeight="14"
+                                               Margin="2,8,2,0"
+                                               Foreground="{DynamicResource EarningsGreenBrush}"
+                                               FontSize="10"
+                                               Text="OCR is idle."
+                                               TextWrapping="Wrap" />
+
+                                    <Expander Margin="0,10,0,0"
+                                              Style="{DynamicResource PremiumExpander}">
+                                        <Expander.Header>
+                                            <TextBlock Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" Text="OCR diagnostics  ›" />
+                                        </Expander.Header>
+                                        <Border Margin="0,8,0,0"
+                                                Padding="12"
+                                                Background="{DynamicResource SecondaryBackgroundBrush}"
+                                                BorderBrush="{DynamicResource MutedBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="9">
+                                            <StackPanel>
+                                                <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="LATEST RAW OCR TEXT" />
+                                                <TextBlock x:Name="DiagnosticRawText"
+                                                           Margin="0,5,0,0"
+                                                           FontFamily="Consolas"
+                                                           FontSize="10"
+                                                           Text="(none)"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock x:Name="DiagnosticConfidenceText" Margin="0,8,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Confidence: --" />
+                                                <TextBlock x:Name="DiagnosticMethodText" Margin="0,3,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Preprocessing: --" />
+                                                <TextBlock x:Name="DiagnosticDetectionMethodText" Margin="0,3,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Detection method: --" />
+                                                <TextBlock x:Name="DiagnosticScanTimeText" Margin="0,3,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Last scan: --" />
+                                                <TextBlock x:Name="DiagnosticStatusText" Margin="0,3,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Scan status: Idle" TextWrapping="Wrap" />
+                                                <Border Height="1" Margin="0,9,0,7" Background="{DynamicResource MutedBorderBrush}" />
+                                                <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="GTA RESULT-SCREEN DETECTOR" />
+                                                <TextBlock x:Name="GtaDiagnosticSummaryText"
+                                                           Margin="0,5,0,0"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="9"
+                                                           Text="No specialized scan data."
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Margin="0,9,0,0" Style="{DynamicResource MicroLabel}" FontSize="9" Text="AMOUNT OCR VARIANTS" />
+                                                <TextBlock x:Name="GtaVariantDiagnosticsText"
+                                                           Margin="0,5,0,0"
+                                                           Foreground="{DynamicResource MutedTextBrush}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="8"
+                                                           Text="(none)"
+                                                           TextWrapping="Wrap" />
+                                                <StackPanel x:Name="GtaDiagnosticPreviewPanel"
+                                                            Margin="0,9,0,0"
+                                                            Orientation="Horizontal"
+                                                            Visibility="Collapsed">
+                                                    <Image x:Name="GtaHeadingCropPreview" Width="105" Height="65" Margin="0,0,5,0" Stretch="Uniform" />
+                                                    <Image x:Name="GtaAmountCropPreview" Width="105" Height="65" Margin="0,0,5,0" Stretch="Uniform" />
+                                                    <Image x:Name="GtaProcessedAmountPreview" Width="105" Height="65" Stretch="Uniform" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </Expander>
+                                </StackPanel>
+                            </Expander>
+                        </Border>
+
+                        <Border x:Name="PayoutConfirmationCard"
+                                Visibility="Collapsed"
+                                Margin="0,12,0,0"
+                                Padding="17"
+                                Background="#FF14251C"
+                                BorderBrush="{DynamicResource EarningsGreenBrush}"
+                                BorderThickness="1.5"
+                                CornerRadius="14"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <TranslateTransform Y="0" />
+                            </Border.RenderTransform>
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock x:Name="ConfirmationHeadingText"
+                                               Foreground="{DynamicResource EarningsGreenBrush}"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Text="PAYOUT REQUIRES CONFIRMATION" />
+                                    <Border HorizontalAlignment="Right" Padding="8,3" Background="#22A6FF5F" CornerRadius="7">
+                                        <TextBlock Foreground="{DynamicResource EarningsGreenBrush}" FontSize="9" Text="MANUAL REVIEW" />
+                                    </Border>
+                                </Grid>
+                                <TextBlock x:Name="DetectedPayoutText"
+                                           Margin="0,8,0,0"
+                                           FontSize="28"
+                                           FontWeight="SemiBold"
+                                           Text="Detected payout: $0" />
+                                <TextBlock x:Name="RecognizedPayoutText"
+                                           Margin="0,6,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="Recognized text:"
+                                           TextWrapping="Wrap" />
+                                <TextBlock x:Name="ConfirmationMetaText"
+                                           Margin="0,5,0,0"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="10"
+                                           Text="Confidence: -- • Preprocessing: --"
+                                           TextWrapping="Wrap" />
+                                <TextBlock x:Name="ConfirmationDiagnosticsText"
+                                           Margin="0,5,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="Readers: --"
+                                           TextWrapping="Wrap" />
+                                <Grid x:Name="ConfirmationPreviewPanel"
+                                      Visibility="Collapsed"
+                                      Height="118"
+                                      Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#FF090D12" BorderBrush="{DynamicResource MutedBorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                                        <Image x:Name="ConfirmationAmountCropImage" Margin="4" Stretch="Uniform" />
+                                    </Border>
+                                    <Border Grid.Column="2" Background="#FF090D12" BorderBrush="{DynamicResource MutedBorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                                        <Image x:Name="ConfirmationProcessedCropImage" Margin="4" Stretch="Uniform" />
+                                    </Border>
+                                </Grid>
+                                <Border x:Name="ExpandedEditPanel"
+                                        Visibility="Collapsed"
+                                        Margin="0,10,0,0"
+                                        Padding="10"
+                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        BorderBrush="{DynamicResource ScannerCyanBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+                                    <StackPanel>
+                                        <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="EDIT DETECTED AMOUNT" />
+                                        <TextBox x:Name="ExpandedEditAmountTextBox" Height="42" Margin="0,7,0,0" Padding="11,0" FontSize="16" VerticalContentAlignment="Center" KeyDown="PendingEditTextBox_KeyDown" />
+                                        <TextBlock x:Name="ExpandedEditValidationText" MinHeight="14" Margin="2,5,2,0" Foreground="{DynamicResource ErrorRedBrush}" FontSize="10" TextWrapping="Wrap" />
+                                        <Grid Margin="0,7,0,0">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <Button Style="{DynamicResource PrimaryButton}" Content="SAVE PAYOUT" Click="SaveEditedPayoutButton_Click" />
+                                            <Button Grid.Column="2" Style="{DynamicResource GhostButton}" Content="CANCEL" Click="CancelEditedPayoutButton_Click" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Grid Margin="0,13,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="1.25*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="0.85*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Style="{DynamicResource PrimaryButton}" Content="Confirm Payout" Click="ConfirmPayoutButton_Click" />
+                                    <Button Grid.Column="2" Style="{DynamicResource SecondaryButton}" Content="Edit Amount" Click="EditDetectedAmountButton_Click" />
+                                    <Button Grid.Column="4" Style="{DynamicResource DangerButton}" Content="Reject" Click="RejectPayoutButton_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <ScrollViewer x:Name="SettingsScrollViewer"
+                              Visibility="Collapsed"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto"
+                              PanningMode="VerticalOnly"
+                              RenderTransformOrigin="0.5,0.5">
+                    <ScrollViewer.RenderTransform>
+                        <TranslateTransform X="0" />
+                    </ScrollViewer.RenderTransform>
+                    <StackPanel Margin="20,4,20,22">
+                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="SETTINGS" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="11"
+                                   Text="Configure the overlay without changing its passive security model." />
+
+                        <Border Margin="0,14,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="APPEARANCE" />
+                                <TextBlock Margin="0,7,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="11"
+                                           Text="Choose a color atmosphere for the dashboard and compact overlay."
+                                           TextWrapping="Wrap" />
+                                <ComboBox x:Name="ThemeComboBox"
+                                          Margin="0,12,0,0"
+                                          SelectionChanged="ThemeComboBox_SelectionChanged">
+                                    <ComboBoxItem Tag="Dark" Content="Dark — Heist Ledger" />
+                                    <ComboBoxItem Tag="Light" Content="Light — Clean Daylight" />
+                                    <ComboBoxItem Tag="Purple" Content="Purple — Neon Club" />
+                                    <ComboBoxItem Tag="Galaxy" Content="Galaxy — Cosmic Blue" />
+                                    <ComboBoxItem Tag="Midnight" Content="Midnight — Deep Ocean" />
+                                    <ComboBoxItem Tag="Crimson" Content="Crimson — High Stakes" />
+                                </ComboBox>
+                                <StackPanel Margin="2,12,2,0" Orientation="Horizontal">
+                                    <Ellipse Width="12" Height="12" Fill="#A6FF5F" />
+                                    <Ellipse Width="12" Height="12" Margin="7,0,0,0" Fill="#C98CFF" />
+                                    <Ellipse Width="12" Height="12" Margin="7,0,0,0" Fill="#78E4FF" />
+                                    <Ellipse Width="12" Height="12" Margin="7,0,0,0" Fill="#FF718A" />
+                                    <TextBlock Margin="10,-1,0,0"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="10"
+                                               Text="Theme changes apply instantly" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="GLOBAL SHORTCUT" />
+                                <CheckBox x:Name="HotkeyEnabledCheckBox"
+                                          Margin="0,14,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Enable global shortcut" />
+                                <Border Margin="0,13,0,0"
+                                        Padding="12"
+                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        BorderBrush="{DynamicResource MutedBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="CURRENT SHORTCUT" />
+                                            <TextBlock x:Name="CurrentHotkeyText"
+                                                       Margin="0,4,0,0"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       Text="Ctrl + Shift + H" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="ProposedHotkeyText"
+                                                   Grid.Column="1"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource ScannerCyanBrush}"
+                                                   FontSize="11"
+                                                   Text="" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock x:Name="HotkeyWarningText"
+                                           Visibility="Collapsed"
+                                           Margin="0,9,0,0"
+                                           Foreground="{DynamicResource WarningGoldBrush}"
+                                           FontSize="10"
+                                           TextWrapping="Wrap" />
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="RecordHotkeyButton"
+                                            Style="{DynamicResource SecondaryButton}"
+                                            Content="Record New Shortcut"
+                                            Click="RecordHotkeyButton_Click" />
+                                    <Button Grid.Column="2"
+                                            Style="{DynamicResource GhostButton}"
+                                            Content="Reset to Ctrl + Shift + H"
+                                            Click="ResetHotkeyButton_Click" />
+                                </Grid>
+                                <Button Margin="0,9,0,0"
+                                        Style="{DynamicResource PrimaryButton}"
+                                        Content="Apply Shortcut"
+                                        Click="ApplyHotkeyButton_Click" />
+                                <TextBlock x:Name="HotkeyRegistrationStatusText"
+                                           Margin="0,9,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="Registration status: Waiting for startup"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="WINDOW BEHAVIOR" />
+                                <CheckBox x:Name="AlwaysOnTopSettingCheckBox"
+                                          Margin="0,14,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Always on top"
+                                          Click="WindowSettingCheckBox_Click" />
+                                <CheckBox x:Name="RememberWindowPositionCheckBox"
+                                          Margin="0,12,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Remember window position"
+                                          Click="WindowSettingCheckBox_Click" />
+                                <CheckBox x:Name="StartCompactSettingCheckBox"
+                                          Margin="0,12,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Start in compact mode"
+                                          Click="StartCompactSettingCheckBox_Click" />
+                                <CheckBox x:Name="PauseLivePreviewWhenHiddenCheckBox"
+                                          Margin="0,12,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Pause preview rendering while hidden"
+                                          Click="WindowSettingCheckBox_Click" />
+                                <CheckBox x:Name="ContinueScannerWhileHiddenCheckBox"
+                                          Visibility="Collapsed"
+                                          Margin="0,12,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Continue scanner while hidden"
+                                          Click="WindowSettingCheckBox_Click" />
+                                <TextBlock Margin="0,10,0,0"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="10"
+                                           Text="The global shortcut hides this window without closing it. Quick Scan remains available when you show the same window again."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="SCANNER PERFORMANCE" />
+                                <ComboBox x:Name="ScannerAreaModeComboBox"
+                                          Visibility="Collapsed"
+                                          SelectedIndex="1">
+                                    <ComboBoxItem Tag="AutoLocate" Content="Legacy Auto Locate" />
+                                    <ComboBoxItem Tag="SelectedRegion" Content="Selected Region" />
+                                </ComboBox>
+                                <TextBlock Margin="0,11,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="Detection mode" />
+                                <ComboBox x:Name="ScannerDetectionModeComboBox"
+                                          Height="36"
+                                          Margin="0,6,0,0"
+                                          SelectionChanged="ScannerDetectionModeComboBox_SelectionChanged">
+                                    <ComboBoxItem Tag="Fast" Content="Fast &#x2014; recommended" />
+                                    <ComboBoxItem Tag="Balanced" Content="Balanced" />
+                                    <ComboBoxItem Tag="Thorough" Content="Thorough &#x2014; troubleshooting" />
+                                </ComboBox>
+                                <CheckBox x:Name="ShowTrayNotificationCheckBox"
+                                          Margin="0,13,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Show tray notification after detected payout"
+                                          Click="WindowSettingCheckBox_Click" />
+                                <CheckBox x:Name="ShowScannerPerformanceDiagnosticsCheckBox"
+                                          Margin="0,12,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Show scanner performance diagnostics"
+                                          Click="WindowSettingCheckBox_Click" />
+                                <CheckBox Margin="0,12,0,0"
+                                          IsChecked="True"
+                                          IsEnabled="False"
+                                          Content="Require confirmation for uncertain results &#x2014; always on" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="QUICK SCAN" />
+                                <TextBlock Margin="0,10,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="11"
+                                           Text="Quick Scan analyzes only your confirmed payout rectangle using a five-frame in-memory verification burst."
+                                           TextWrapping="Wrap" />
+                                <ComboBox x:Name="QuickCaptureMonitorComboBox"
+                                          Visibility="Collapsed" />
+                                <CheckBox x:Name="RequireQuickConfirmationCheckBox"
+                                          Margin="0,13,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          IsChecked="True"
+                                          IsEnabled="False"
+                                          Content="Always verify a detected amount before saving" />
+                                <TextBlock x:Name="SettingsCaptureAreaText"
+                                           Margin="0,13,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="Selected payout area: Not selected"
+                                           TextWrapping="Wrap" />
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Style="{DynamicResource SecondaryButton}"
+                                            Content="CHANGE CAPTURE AREA"
+                                            Click="SelectCaptureAreaButton_Click" />
+                                    <Button Grid.Column="2"
+                                            Style="{DynamicResource DangerButton}"
+                                            Content="RESET CAPTURE AREA"
+                                            Click="ClearCaptureAreaButton_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{DynamicResource MicroLabel}" Text="DISCORD WEBHOOK" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   FontSize="11"
+                                                   Text="Post confirmed Quick Scan payouts to your server."
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Border Grid.Column="1"
+                                            Margin="10,0,0,0"
+                                            Padding="9,5"
+                                            VerticalAlignment="Top"
+                                            Background="{DynamicResource AccentSurfaceBrush}"
+                                            BorderBrush="{DynamicResource AccentBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10">
+                                        <TextBlock Foreground="{DynamicResource EarningsGreenBrush}"
+                                                   FontSize="9"
+                                                   FontWeight="SemiBold"
+                                                   Text="OPT-IN" />
+                                    </Border>
+                                </Grid>
+
+                                <TextBlock Margin="0,14,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="Display username (required)" />
+                                <Border Height="40"
+                                        Margin="0,6,0,0"
+                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+                                    <TextBox x:Name="DiscordUsernameTextBox"
+                                             Padding="12,0"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             CaretBrush="{DynamicResource PrimaryTextBrush}"
+                                             Foreground="{DynamicResource PrimaryTextBrush}"
+                                             FontFamily="Segoe UI Variable Text, Segoe UI"
+                                             FontSize="12"
+                                             MaxLength="80"
+                                             VerticalContentAlignment="Center"
+                                             ToolTip="The name shown with each payout" />
+                                </Border>
+
+                                <TextBlock Margin="0,12,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="Discord webhook URL" />
+                                <Border Height="40"
+                                        Margin="0,6,0,0"
+                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+                                    <PasswordBox x:Name="DiscordWebhookPasswordBox"
+                                                 Padding="12,0"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 CaretBrush="{DynamicResource PrimaryTextBrush}"
+                                                 Foreground="{DynamicResource PrimaryTextBrush}"
+                                                 FontFamily="Segoe UI Variable Text, Segoe UI"
+                                                 FontSize="12"
+                                                 MaxLength="500"
+                                                 VerticalContentAlignment="Center"
+                                                 ToolTip="Server Settings > Integrations > Webhooks > Copy Webhook URL" />
+                                </Border>
+
+                                <CheckBox x:Name="DiscordEnabledCheckBox"
+                                          Margin="0,14,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Send confirmed Quick Scan payouts" />
+                                <CheckBox x:Name="DiscordIncludeScreenshotCheckBox"
+                                          Margin="0,12,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Attach the in-memory payout preview" />
+
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="SaveDiscordSettingsButton"
+                                            Style="{DynamicResource PrimaryButton}"
+                                            Content="SAVE DISCORD"
+                                            Click="SaveDiscordSettingsButton_Click" />
+                                    <Button x:Name="TestDiscordWebhookButton"
+                                            Grid.Column="2"
+                                            Style="{DynamicResource SecondaryButton}"
+                                            Content="SEND TEST"
+                                            Click="TestDiscordWebhookButton_Click" />
+                                </Grid>
+
+                                <TextBlock x:Name="DiscordStatusText"
+                                           Margin="0,10,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="Add a username and webhook URL, then save."
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,8,0,0"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="9"
+                                           LineHeight="14"
+                                           Text="The webhook token is encrypted for your current Windows account. A screenshot is uploaded only after you confirm a Quick Scan and only when attachment sharing is enabled."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="PRIVACY AND SAFETY" />
+                                <TextBlock Margin="0,10,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="11"
+                                           LineHeight="19"
+                                           Text="• OCR runs locally&#x0a;• Captured images are processed in memory&#x0a;• Payout previews upload only when Discord sharing is enabled&#x0a;• No game memory is accessed&#x0a;• No game files are changed&#x0a;• No keyboard or mouse input is automated"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <Grid x:Name="CaptureSetupPanel"
+                  Grid.Row="2"
+                  Panel.ZIndex="30"
+                  Visibility="Collapsed"
+                  Margin="24,8,24,24">
+                <Border Padding="26"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource HeroCardBrush}"
+                        BorderBrush="{DynamicResource AccentBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="18">
+                    <StackPanel>
+                        <TextBlock Foreground="{DynamicResource EarningsGreenBrush}" FontSize="11" FontWeight="SemiBold" Text="HEIST LEDGER" />
+                        <TextBlock Margin="0,10,0,0" FontSize="25" FontWeight="SemiBold" Text="Set up your payout scanner" />
+                        <TextBlock Margin="0,10,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="12"
+                                   LineHeight="19"
+                                   Text="Select the area where GTA displays “TOTAL CASH EARNED” and the complete amount below it. Leave a small border around both lines."
+                                   TextWrapping="Wrap" />
+                        <Border x:Name="SetupPreviewBorder"
+                                Visibility="Collapsed"
+                                Height="120"
+                                Margin="0,16,0,0"
+                                Background="{DynamicResource PreviewBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                ClipToBounds="True">
+                            <Image x:Name="SetupPreviewImage" Margin="6" Stretch="Uniform" />
+                        </Border>
+                        <TextBlock x:Name="SetupStatusText"
+                                   Margin="0,12,0,0"
+                                   Foreground="{DynamicResource EarningsGreenBrush}"
+                                   FontSize="11"
+                                   Text="Select a payout area to continue."
+                                   TextWrapping="Wrap" />
+                        <Button x:Name="SetupSelectAreaButton"
+                                Height="46"
+                                Margin="0,16,0,0"
+                                Style="{DynamicResource PrimaryButton}"
+                                Content="SELECT PAYOUT AREA"
+                                Click="SelectCaptureAreaButton_Click" />
+                        <TextBlock Margin="0,13,0,0"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="10"
+                                   LineHeight="16"
+                                   Text="You only need to do this again if you change resolution, display mode, monitor, or where the result appears."
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Grid x:Name="CompactDashboard"
+                  Grid.Row="2"
+                  Visibility="Collapsed"
+                  Margin="16,0,16,14"
+                  RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <TranslateTransform X="0" />
+                </Grid.RenderTransform>
+                <Grid x:Name="CompactNormalPanel">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border Padding="12" Background="{DynamicResource HeroCardBrush}" BorderBrush="{DynamicResource AccentBorderBrush}" BorderThickness="1" CornerRadius="12">
+                        <StackPanel>
+                            <TextBlock Style="{DynamicResource MicroLabel}" FontSize="8" Text="LAST 24 HOURS" />
+                            <TextBlock x:Name="CompactDayTotalText" Margin="0,4,0,0" Foreground="{DynamicResource EarningsGreenBrush}" FontSize="27" FontWeight="SemiBold" Text="$0" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Border>
+                    <Grid Grid.Row="1" Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Padding="10" Background="{DynamicResource ElevatedCardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" FontSize="8" Text="7 DAYS" />
+                                <TextBlock x:Name="CompactWeekTotalText" Margin="0,4,0,0" FontSize="17" FontWeight="SemiBold" Text="$0" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Padding="10" Background="{DynamicResource ElevatedCardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" FontSize="8" Text="LAST PAYOUT" />
+                                <TextBlock x:Name="CompactLastPayoutText" Margin="0,4,0,0" FontSize="17" FontWeight="SemiBold" Text="$0" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Grid Grid.Row="2" Margin="2,10,2,0">
+                        <Grid x:Name="CompactStatusPanel">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse x:Name="CompactCaptureReadyDot" Width="7" Height="7" Fill="{DynamicResource WarningGoldBrush}" />
+                                <TextBlock x:Name="CompactCaptureReadyText" Margin="6,0,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="9" Text="AREA REQUIRED" />
+                            </StackPanel>
+                            <TextBlock HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="9"
+                                       Text="5-FRAME VERIFIED SCAN" />
+                        </Grid>
+                        <Border x:Name="CompactScanMessageBorder"
+                                Visibility="Collapsed"
+                                Padding="8,4"
+                                Background="{DynamicResource AccentSurfaceBrush}"
+                                BorderBrush="{DynamicResource AccentBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <TranslateTransform Y="-5" />
+                            </Border.RenderTransform>
+                            <TextBlock x:Name="CompactScanMessageText"
+                                       Foreground="{DynamicResource EarningsGreenBrush}"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       TextAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Border>
+                    </Grid>
+                    <Button x:Name="CompactQuickCaptureButton"
+                            Grid.Row="3"
+                            Height="48"
+                            Margin="0,10,0,0"
+                            Style="{DynamicResource PrimaryButton}"
+                            FontSize="12"
+                            Content="QUICK SCAN"
+                            Click="QuickCaptureButton_Click" />
+                </Grid>
+
+                <Border x:Name="CompactPendingIndicator"
+                        Visibility="Collapsed"
+                        Padding="14"
+                        Background="{DynamicResource AccentSurfaceBrush}"
+                        BorderBrush="{DynamicResource EarningsGreenBrush}"
+                        BorderThickness="1.5"
+                        CornerRadius="13">
+                    <StackPanel>
+                        <TextBlock Foreground="{DynamicResource EarningsGreenBrush}" FontSize="10" FontWeight="SemiBold" Text="PAYOUT FOUND — VERIFY BEFORE SAVING" />
+                        <TextBlock x:Name="CompactPendingText" Margin="0,6,0,0" FontSize="29" FontWeight="SemiBold" Text="$0" />
+                        <TextBlock x:Name="CompactPendingMetaText" Margin="0,5,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Confidence: --  •  Readers agreeing: --" TextWrapping="Wrap" />
+                        <TextBlock x:Name="CompactPendingConflictText" Margin="0,3,0,0" Foreground="{DynamicResource WarningGoldBrush}" FontSize="10" Text="Possible conflict: None" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,5,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="9"
+                                   Text="Compare the amount with GTA. Edit it if any digit is wrong."
+                                   TextWrapping="Wrap" />
+                        <Border Height="92" Margin="0,9,0,0" Background="{DynamicResource PreviewBackgroundBrush}" BorderBrush="{DynamicResource MutedBorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                            <Image x:Name="CompactPendingPreviewImage" Margin="4" Stretch="Uniform" />
+                        </Border>
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="7" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="7" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button Height="40" Style="{DynamicResource PrimaryButton}" Content="CONFIRM" Click="ConfirmPayoutButton_Click" />
+                            <Button Grid.Column="2" Height="40" Style="{DynamicResource SecondaryButton}" Content="EDIT" Click="EditDetectedAmountButton_Click" />
+                            <Button Grid.Column="4" Height="40" Style="{DynamicResource DangerButton}" Content="REJECT" Click="RejectPayoutButton_Click" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="CompactEditPanel" Visibility="Collapsed" Padding="14" Background="{DynamicResource ElevatedCardBrush}" BorderBrush="{DynamicResource ScannerCyanBrush}" BorderThickness="1" CornerRadius="13">
+                    <StackPanel>
+                        <TextBlock Style="{DynamicResource MicroLabel}" Text="EDIT DETECTED AMOUNT" />
+                        <TextBox x:Name="CompactEditAmountTextBox" Height="44" Margin="0,10,0,0" Padding="12,0" FontSize="17" VerticalContentAlignment="Center" KeyDown="PendingEditTextBox_KeyDown" />
+                        <TextBlock x:Name="CompactEditValidationText" MinHeight="14" Margin="2,6,2,0" Foreground="{DynamicResource ErrorRedBrush}" FontSize="10" TextWrapping="Wrap" />
+                        <Grid Margin="0,9,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Button Style="{DynamicResource PrimaryButton}" Content="SAVE PAYOUT" Click="SaveEditedPayoutButton_Click" />
+                            <Button Grid.Column="2" Style="{DynamicResource GhostButton}" Content="CANCEL" Click="CancelEditedPayoutButton_Click" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+            </Grid>
+
+            <Border x:Name="QuickCaptureNotification"
+                    Grid.Row="2"
+                    Panel.ZIndex="50"
+                    Visibility="Collapsed"
+                    Width="285"
+                    Margin="0,14,18,0"
+                    Padding="14"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Background="{DynamicResource ElevatedCardBrush}"
+                    BorderBrush="{DynamicResource AccentBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="QuickCaptureNotificationAmount"
+                                   Foreground="{DynamicResource EarningsGreenBrush}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   Text="Added $0" />
+                        <TextBlock Margin="0,3,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="10"
+                                   Text="Quick Capture" />
+                    </StackPanel>
+                    <Button x:Name="QuickCaptureNotificationUndoButton"
+                            Grid.Column="1"
+                            Height="32"
+                            Margin="12,0,0,0"
+                            Padding="12,0"
+                            Style="{DynamicResource GhostButton}"
+                            Content="Undo"
+                            Click="QuickCaptureUndoButton_Click" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
