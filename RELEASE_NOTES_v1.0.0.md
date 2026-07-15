@@ -21,7 +21,9 @@ Heist Ledger is a normal standalone Windows application. It does not read game m
 
 1. Download `Heist-Ledger-v1.0.0-win-x64.zip`.
 2. Extract the entire ZIP to a folder.
-3. Run `GTAEarningsTracker.exe`.
+3. Run `HeistLedger.exe` from the top level of the extracted folder.
 4. Select the GTA payout area when prompted.
 
-The package includes the .NET 9 Windows runtime. OCR requires the Microsoft Visual C++ 2015–2022 x64 Redistributable.
+The ZIP contains only the main EXE at its top level and a `Documentation` folder. The EXE bundles the .NET 9 Windows Desktop runtime, WPF, and the OCR components into one self-extracting file. OCR requires the Microsoft Visual C++ 2015–2022 x64 Redistributable.
+
+This first release is not Authenticode-signed, so Windows SmartScreen may identify it as an unrecognized app. The release includes a SHA-256 checksum for verification. A publicly trusted code-signing identity or Microsoft Store distribution is required to provide a trusted publisher experience.
