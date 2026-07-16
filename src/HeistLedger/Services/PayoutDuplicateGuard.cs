@@ -2,6 +2,12 @@ using GTAEarningsTracker.Models;
 
 namespace GTAEarningsTracker.Services;
 
+public enum ScanRequestMode
+{
+    Normal,
+    ForcedRescan
+}
+
 public sealed class PayoutDuplicateGuard
 {
     // Matches the Quick Capture notification lifetime. An identical result still
@@ -9,6 +15,7 @@ public sealed class PayoutDuplicateGuard
     private static readonly TimeSpan DismissalCooldown = TimeSpan.FromSeconds(4);
 
     private readonly Dictionary<string, DateTime> _dismissedCandidates = [];
+    private readonly HashSet<string> _savedScreenCandidates = new(StringComparer.Ordinal);
     private string? _visibleCandidateKey;
     private string? _visibleImageFingerprint;
     private int _consecutiveMissingScans;
@@ -19,7 +26,10 @@ public sealed class PayoutDuplicateGuard
 
     public string? LastNormalizedText { get; private set; }
 
-    public bool ShouldPresent(DetectedPayout candidate, DateTime nowUtc)
+    public bool ShouldPresent(
+        DetectedPayout candidate,
+        DateTime nowUtc,
+        ScanRequestMode requestMode = ScanRequestMode.Normal)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         RemoveExpiredCooldowns(nowUtc);
@@ -29,18 +39,6 @@ public sealed class PayoutDuplicateGuard
         LastDetectedAmount = candidate.Amount;
         LastNormalizedText = candidate.NormalizedOcrText;
         _consecutiveMissingScans = 0;
-
-        if (_visibleCandidateKey == key ||
-            string.Equals(_visibleImageFingerprint, candidate.ImageFingerprint, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (_dismissedCandidates.TryGetValue(key, out var dismissedAtUtc) &&
-            nowUtc - dismissedAtUtc < DismissalCooldown)
-        {
-            return false;
-        }
 
         _visibleCandidateKey = key;
         _visibleImageFingerprint = candidate.ImageFingerprint;
@@ -73,6 +71,19 @@ public sealed class PayoutDuplicateGuard
         RemoveExpiredCooldowns(nowUtc);
     }
 
+    public bool CanSave(DetectedPayout candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        return true;
+    }
+
+    public void RecordSaved(DetectedPayout candidate, DateTime nowUtc)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        _savedScreenCandidates.Add(CreateSavedScreenKey(candidate));
+        RecordDismissal(candidate, nowUtc);
+    }
+
     private void RemoveExpiredCooldowns(DateTime nowUtc)
     {
         var expiredKeys = _dismissedCandidates
@@ -89,5 +100,10 @@ public sealed class PayoutDuplicateGuard
     private static string CreateKey(DetectedPayout candidate)
     {
         return $"{candidate.Amount}|{candidate.NormalizedOcrText}";
+    }
+
+    private static string CreateSavedScreenKey(DetectedPayout candidate)
+    {
+        return $"{candidate.ImageFingerprint}|{candidate.Amount}";
     }
 }

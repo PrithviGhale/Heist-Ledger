@@ -681,7 +681,7 @@ public sealed class OptimizedGtaResultScreenDetectionService
             bottom - top >= 12 * scale);
     }
 
-    private static Int32Rect CreateAmountBounds(BitmapSource source, Int32Rect? anchorBounds)
+    public static Int32Rect CreateAmountBounds(BitmapSource source, Int32Rect? anchorBounds)
     {
         var left = anchorBounds is Int32Rect horizontalAnchor
             ? Math.Clamp(
@@ -703,6 +703,9 @@ public sealed class OptimizedGtaResultScreenDetectionService
                     source.PixelHeight * 0.25,
                     measuredAnchor.Height * 4.2)))
             : Math.Min(source.PixelHeight, (int)Math.Ceiling(source.PixelHeight * 0.90));
+        // The anchor-relative height normally stops well before any taskbar in a
+        // roomy selection. If the saved region is tight, preserve its final rows;
+        // a fixed bottom trim can cut the baseline or final translucent digit.
         return new Int32Rect(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
     }
 

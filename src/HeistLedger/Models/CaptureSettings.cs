@@ -53,6 +53,8 @@ public sealed class CaptureSettings
 
     public bool ShowScannerPerformanceDiagnostics { get; set; }
 
+    public bool PaddleOcrEnabled { get; set; } = true;
+
     public ScannerDetectionMode DetectionMode { get; set; } = ScannerDetectionMode.Fast;
 
     public ScannerAreaMode AreaMode { get; set; } = ScannerAreaMode.SelectedRegion;

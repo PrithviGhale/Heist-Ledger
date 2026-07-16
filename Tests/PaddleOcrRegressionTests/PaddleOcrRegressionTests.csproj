@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HeistLedger\GTAEarningsTracker.csproj" />
+    <None Include="..\..\src\HeistLedger\Models\Ocr\Paddle\inference.onnx" Link="Models\Ocr\Paddle\inference.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\HeistLedger\Models\Ocr\Paddle\character_dictionary.txt" Link="Models\Ocr\Paddle\character_dictionary.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\HeistLedger\tessdata\eng.traineddata" Link="tessdata\eng.traineddata" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fixtures\*.png" Link="TestSamples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

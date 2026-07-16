@@ -14,7 +14,7 @@ public static class QuickCapturePolicy
     // This page-level threshold is conservative in combination with the required
     // three-word anchor, bounded positive amount, and ambiguity rejection.
     // Tesseract typically reports 0-1, but NormalizeConfidence also accepts 0-100.
-    public const float AutomaticAddConfidenceThreshold = 0.65f;
+    public const float AutomaticAddConfidenceThreshold = 0.80f;
 
     public static QuickCaptureDecision Evaluate(
         DetectedPayout? candidate,
