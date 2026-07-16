@@ -722,26 +722,28 @@
                                            FontSize="10"
                                            Text="Confidence: -- • Preprocessing: --"
                                            TextWrapping="Wrap" />
+                                <TextBlock x:Name="ConfirmationVerificationStatusText"
+                                           Margin="0,5,0,0"
+                                           Foreground="{DynamicResource WarningGoldBrush}"
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Text="VERIFICATION REQUIRED" />
                                 <TextBlock x:Name="ConfirmationDiagnosticsText"
                                            Margin="0,5,0,0"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="10"
                                            Text="Readers: --"
                                            TextWrapping="Wrap" />
+                                <Border x:Name="ExpandedPreviousResultBorder" Visibility="Collapsed" Margin="0,8,0,0" Padding="8" Background="{DynamicResource SecondaryBackgroundBrush}" BorderBrush="{DynamicResource WarningGoldBrush}" BorderThickness="1" CornerRadius="7">
+                                    <TextBlock x:Name="ExpandedPreviousResultText" Foreground="{DynamicResource WarningGoldBrush}" FontSize="10" TextWrapping="Wrap" />
+                                </Border>
+                                <TextBlock x:Name="ExpandedScanAttemptsText" Visibility="Collapsed" Margin="0,8,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" TextWrapping="Wrap" />
                                 <Grid x:Name="ConfirmationPreviewPanel"
                                       Visibility="Collapsed"
-                                      Height="118"
+                                      Height="150"
                                       Margin="0,10,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="8" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Background="#FF090D12" BorderBrush="{DynamicResource MutedBorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
                                         <Image x:Name="ConfirmationAmountCropImage" Margin="4" Stretch="Uniform" />
-                                    </Border>
-                                    <Border Grid.Column="2" Background="#FF090D12" BorderBrush="{DynamicResource MutedBorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
-                                        <Image x:Name="ConfirmationProcessedCropImage" Margin="4" Stretch="Uniform" />
                                     </Border>
                                 </Grid>
                                 <Border x:Name="ExpandedEditPanel"
@@ -765,15 +767,18 @@
                                 </Border>
                                 <Grid Margin="0,13,0,0">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="1.25*" />
+                                        <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="8" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="8" />
-                                        <ColumnDefinition Width="0.85*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" Style="{DynamicResource PrimaryButton}" Content="Confirm Payout" Click="ConfirmPayoutButton_Click" />
-                                    <Button Grid.Column="2" Style="{DynamicResource SecondaryButton}" Content="Edit Amount" Click="EditDetectedAmountButton_Click" />
-                                    <Button Grid.Column="4" Style="{DynamicResource DangerButton}" Content="Reject" Click="RejectPayoutButton_Click" />
+                                    <Button x:Name="ExpandedAcceptButton" Grid.Column="0" Style="{DynamicResource PrimaryButton}" Content="ACCEPT" Click="ConfirmPayoutButton_Click" />
+                                    <Button x:Name="ExpandedEditButton" Grid.Column="2" Style="{DynamicResource SecondaryButton}" Content="EDIT" Click="EditDetectedAmountButton_Click" />
+                                    <Button x:Name="ExpandedRescanButton" Grid.Column="4" Style="{DynamicResource SecondaryButton}" Content="RESCAN" Click="RescanPayoutButton_Click" />
+                                    <Button x:Name="ExpandedRejectButton" Grid.Column="6" Style="{DynamicResource DangerButton}" Content="REJECT" Click="RejectPayoutButton_Click" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -929,6 +934,42 @@
                                            FontSize="10"
                                            Text="The global shortcut hides this window without closing it. Quick Scan remains available when you show the same window again."
                                            TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="OCR ENGINES" />
+                                <CheckBox Margin="0,13,0,0"
+                                          IsChecked="True"
+                                          IsEnabled="False"
+                                          Content="Tesseract — enabled and required" />
+                                <CheckBox x:Name="PaddleOcrEnabledCheckBox"
+                                          Margin="0,12,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          IsChecked="True"
+                                          Content="PaddleOCR AI reader"
+                                          Click="PaddleOcrEnabledCheckBox_Click" />
+                                <CheckBox Margin="0,12,0,0"
+                                          IsChecked="True"
+                                          IsEnabled="False"
+                                          Content="GTA digit reader — enabled and required" />
+                                <TextBlock x:Name="PaddleOcrModelStatusText"
+                                           Margin="0,12,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="10"
+                                           Text="AI model status: Loading local model…"
+                                           TextWrapping="Wrap" />
+                                <TextBlock x:Name="PaddleOcrLoadTimeText"
+                                           Margin="0,5,0,0"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="10"
+                                           Text="AI model load time: --" />
+                                <TextBlock x:Name="PaddleOcrLatestTimeText"
+                                           Margin="0,5,0,0"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="10"
+                                           Text="Latest PaddleOCR processing time: --" />
                             </StackPanel>
                         </Border>
 
@@ -1283,10 +1324,15 @@
                         BorderThickness="1.5"
                         CornerRadius="13">
                     <StackPanel>
-                        <TextBlock Foreground="{DynamicResource EarningsGreenBrush}" FontSize="10" FontWeight="SemiBold" Text="PAYOUT FOUND — VERIFY BEFORE SAVING" />
+                        <TextBlock x:Name="CompactPendingHeadingText" Foreground="{DynamicResource EarningsGreenBrush}" FontSize="10" FontWeight="SemiBold" Text="PAYOUT FOUND — VERIFY BEFORE SAVING" />
                         <TextBlock x:Name="CompactPendingText" Margin="0,6,0,0" FontSize="29" FontWeight="SemiBold" Text="$0" />
                         <TextBlock x:Name="CompactPendingMetaText" Margin="0,5,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Confidence: --  •  Readers agreeing: --" TextWrapping="Wrap" />
+                        <TextBlock x:Name="CompactVerificationStatusText" Margin="0,3,0,0" Foreground="{DynamicResource WarningGoldBrush}" FontSize="10" FontWeight="SemiBold" Text="VERIFICATION REQUIRED" />
                         <TextBlock x:Name="CompactPendingConflictText" Margin="0,3,0,0" Foreground="{DynamicResource WarningGoldBrush}" FontSize="10" Text="Possible conflict: None" TextWrapping="Wrap" />
+                        <Border x:Name="CompactPreviousResultBorder" Visibility="Collapsed" Margin="0,7,0,0" Padding="7" Background="{DynamicResource SecondaryBackgroundBrush}" BorderBrush="{DynamicResource WarningGoldBrush}" BorderThickness="1" CornerRadius="7">
+                            <TextBlock x:Name="CompactPreviousResultText" Foreground="{DynamicResource WarningGoldBrush}" FontSize="9" TextWrapping="Wrap" />
+                        </Border>
+                        <TextBlock x:Name="CompactScanAttemptsText" Visibility="Collapsed" Margin="0,7,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" TextWrapping="Wrap" />
                         <TextBlock Margin="0,5,0,0"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="9"
@@ -1296,16 +1342,20 @@
                             <Image x:Name="CompactPendingPreviewImage" Margin="4" Stretch="Uniform" />
                         </Border>
                         <Grid Margin="0,10,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="7" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="7" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="7" />
-                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Button Height="40" Style="{DynamicResource PrimaryButton}" Content="CONFIRM" Click="ConfirmPayoutButton_Click" />
-                            <Button Grid.Column="2" Height="40" Style="{DynamicResource SecondaryButton}" Content="EDIT" Click="EditDetectedAmountButton_Click" />
-                            <Button Grid.Column="4" Height="40" Style="{DynamicResource DangerButton}" Content="REJECT" Click="RejectPayoutButton_Click" />
+                            <Button x:Name="CompactAcceptButton" Height="40" Style="{DynamicResource PrimaryButton}" Content="ACCEPT" Click="ConfirmPayoutButton_Click" />
+                            <Button x:Name="CompactEditButton" Grid.Column="2" Height="40" Style="{DynamicResource SecondaryButton}" Content="EDIT" Click="EditDetectedAmountButton_Click" />
+                            <Button x:Name="CompactRescanButton" Grid.Row="2" Height="40" Style="{DynamicResource SecondaryButton}" Content="RESCAN" Click="RescanPayoutButton_Click" />
+                            <Button x:Name="CompactRejectButton" Grid.Row="2" Grid.Column="2" Height="40" Style="{DynamicResource DangerButton}" Content="REJECT" Click="RejectPayoutButton_Click" />
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -1313,6 +1363,10 @@
                 <Border x:Name="CompactEditPanel" Visibility="Collapsed" Padding="14" Background="{DynamicResource ElevatedCardBrush}" BorderBrush="{DynamicResource ScannerCyanBrush}" BorderThickness="1" CornerRadius="13">
                     <StackPanel>
                         <TextBlock Style="{DynamicResource MicroLabel}" Text="EDIT DETECTED AMOUNT" />
+                        <Border Height="100" Margin="0,9,0,0" Background="{DynamicResource PreviewBackgroundBrush}" BorderBrush="{DynamicResource MutedBorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                            <Image x:Name="CompactEditPreviewImage" Margin="4" Stretch="Uniform" />
+                        </Border>
+                        <TextBlock Margin="2,6,2,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="9" Text="Read the exact amount from this captured GTA image, then enter it below." TextWrapping="Wrap" />
                         <TextBox x:Name="CompactEditAmountTextBox" Height="44" Margin="0,10,0,0" Padding="12,0" FontSize="17" VerticalContentAlignment="Center" KeyDown="PendingEditTextBox_KeyDown" />
                         <TextBlock x:Name="CompactEditValidationText" MinHeight="14" Margin="2,6,2,0" Foreground="{DynamicResource ErrorRedBrush}" FontSize="10" TextWrapping="Wrap" />
                         <Grid Margin="0,9,0,0">

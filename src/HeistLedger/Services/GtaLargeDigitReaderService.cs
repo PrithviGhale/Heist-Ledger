@@ -23,6 +23,13 @@ public sealed record PayoutConsensusDecision(
     bool HasDigitCountConflict,
     bool MeetsExactAgreementPolicy);
 
+public sealed record OcrEngineConsensusDecision(
+    long? WinningAmount,
+    int AgreeingReaders,
+    bool HasCompetingCandidate,
+    bool MatchingDigitCounts,
+    bool EligibleForAutomaticAdd);
+
 public sealed class GtaLargeDigitReaderService
 {
     public const int MinimumBurstFrames = 3;
@@ -32,14 +39,17 @@ public sealed class GtaLargeDigitReaderService
 
     private readonly PayoutDetectionService _detector;
     private readonly OcrService _amountOcr;
+    private readonly PaddleOcrRecognitionService? _paddleOcr;
     private readonly FastGtaPreprocessingService _preprocessing = new();
 
     public GtaLargeDigitReaderService(
         PayoutDetectionService detector,
-        OcrService amountOcr)
+        OcrService amountOcr,
+        PaddleOcrRecognitionService? paddleOcr = null)
     {
         _detector = detector;
         _amountOcr = amountOcr;
+        _paddleOcr = paddleOcr;
     }
 
     public static PayoutConsensusDecision EvaluateConsensus(
@@ -74,6 +84,50 @@ public sealed class GtaLargeDigitReaderService
             winner.Agreement >= MinimumIndependentReadersForAutomaticAdd &&
                 !conflict &&
                 !digitCountConflict);
+    }
+
+    public static OcrEngineConsensusDecision EvaluateEngineConsensus(
+        long? tesseractAmount,
+        long? paddleAmount,
+        long? digitReaderAmount,
+        int supportingTesseractResults,
+        int supportingPaddleResults,
+        bool hasUncertainDigitPositions,
+        bool hasSimilarlySupportedCompetingCandidate)
+    {
+        var votes = new[] { tesseractAmount, paddleAmount, digitReaderAmount }
+            .Where(amount => amount is not null)
+            .Select(amount => amount!.Value)
+            .ToArray();
+        if (votes.Length == 0)
+        {
+            return new OcrEngineConsensusDecision(null, 0, false, false, false);
+        }
+
+        var winner = votes
+            .GroupBy(amount => amount)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key == tesseractAmount ? 0 : 1)
+            .First();
+        var amount = winner.Key;
+        var hasEngineConflict = votes.Any(vote => vote != amount);
+        var matchingDigitCounts = new[] { tesseractAmount, paddleAmount, digitReaderAmount }
+            .Where(candidate => candidate is not null)
+            .All(candidate => candidate!.Value.ToString(CultureInfo.InvariantCulture).Length ==
+                amount.ToString(CultureInfo.InvariantCulture).Length);
+        var tesseractAndPaddleAgree = tesseractAmount == amount && paddleAmount == amount;
+        var allThreeReadersAgree = digitReaderAmount == amount;
+        var hasConflict = hasEngineConflict || hasSimilarlySupportedCompetingCandidate;
+        return new OcrEngineConsensusDecision(
+            amount,
+            winner.Count(),
+            hasConflict,
+            matchingDigitCounts,
+            tesseractAndPaddleAgree &&
+                allThreeReadersAgree &&
+                matchingDigitCounts &&
+                !hasUncertainDigitPositions &&
+                !hasConflict);
     }
 
     public BurstPayoutAnalysisResult Analyze(
@@ -118,6 +172,8 @@ public sealed class GtaLargeDigitReaderService
         }
 
         var readers = new List<ReaderResult>();
+        var paddleReaders = new List<PaddleReaderResult>();
+        var geometrySources = new List<GeometryReaderSource>();
         var ocrDiagnostics = new List<GtaAmountOcrDiagnostic>();
         var priorStableResults = initialAnalysis?.GtaResultDiagnostics?.AmountOcrResults
             .Where(result => result.PreprocessingMethod.StartsWith("Stable frame", StringComparison.Ordinal) &&
@@ -153,6 +209,7 @@ public sealed class GtaLargeDigitReaderService
             initialAnalysis is not null && frames.Count > MinimumBurstFrames;
         var fastPathComplete = fastConsensus.MeetsExactAgreementPolicy && !continuingTargetedFallback;
         var runTargetedFallback = !fastPathComplete && frames.Count > MinimumBurstFrames;
+        BitmapSource? medianComposite = null;
         if (runTargetedFallback)
         {
             for (var index = MinimumBurstFrames; index < Math.Min(MaximumBurstFrames, amountCrops.Count); index++)
@@ -161,7 +218,7 @@ public sealed class GtaLargeDigitReaderService
             }
 
             var brightComposite = CreateBrightLowSaturationComposite(amountCrops);
-            var medianComposite = CreateMedianLuminanceComposite(amountCrops);
+            medianComposite = CreateMedianLuminanceComposite(amountCrops);
             ReadWholeLine(
                 "Neutral brightness composite",
                 medianComposite,
@@ -173,7 +230,18 @@ public sealed class GtaLargeDigitReaderService
                 VariantKind.ClosedMask,
                 OcrAmountPageSegmentation.SingleLine);
             ReadWholeLine("Bright low-saturation composite", brightComposite, VariantKind.GreenSuppression);
+            CorrectFalseDollarPrefixUsingWholeLineEvidence(readers);
             CorrectDollarMergedLeadingDigit(readers, amountCrops[0], ocrDiagnostics, cancellationToken);
+            RecoverLeadingMergedDigits(readers, ocrDiagnostics, cancellationToken);
+            var strongestWholeLineAgreement = readers
+                .GroupBy(reader => reader.Amount)
+                .Select(group => group.Select(reader => reader.ReaderName).Distinct(StringComparer.Ordinal).Count())
+                .DefaultIfEmpty(0)
+                .Max();
+            if (strongestWholeLineAgreement < MinimumIndependentReadersForAutomaticAdd)
+            {
+                AddProjectionSegmentedReader(readers, amountCrops[0], ocrDiagnostics, cancellationToken);
+            }
             RecoverTrailingDigitWhenSupported(readers, firstDiagnostics.AmountOcrResults);
             AddProbeVoteWhenGeometrySupports(readers, firstAnalysis.Candidate);
             RemoveGeometricallyIncompleteReadersWhenCompleteEvidenceExists(readers);
@@ -230,30 +298,114 @@ public sealed class GtaLargeDigitReaderService
             long.TryParse(segmentedDigits, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedSegmented)
                 ? parsedSegmented
                 : (long?)null;
-        var uncertainPositions = digitDiagnostics
-            .Where(digit => digit.IsUncertain)
-            .Select(digit => digit.Position.ToString(CultureInfo.InvariantCulture))
+        if (_paddleOcr?.Enabled == true)
+        {
+            ReadPaddle("Best processed amount", Decode(representative.Variant));
+            if (runTargetedFallback)
+            {
+                var paddleBrightComposite = CreateBrightLowSaturationComposite(amountCrops);
+                ReadPaddle("Bright low-saturation composite", paddleBrightComposite);
+                if (medianComposite is not null)
+                {
+                    ReadPaddle("Neutral brightness composite", medianComposite);
+                }
+            }
+        }
+        var paddleWinner = paddleReaders
+            .GroupBy(reader => reader.Amount)
+            .OrderByDescending(group => group.Count())
+            .ThenByDescending(group => group.Average(reader => reader.Confidence))
+            .FirstOrDefault();
+        var paddleAmount = paddleWinner?.Key;
+        var engineVotes = new[] { (long?)winner.Amount, paddleAmount, segmentedAmount }
+            .Where(amount => amount is not null)
+            .Select(amount => amount!.Value)
             .ToArray();
-        var expectedDigitCount = winner.Amount.ToString(CultureInfo.InvariantCulture).Length;
+        var engineWinner = engineVotes
+            .GroupBy(amount => amount)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key == winner.Amount ? 0 : 1)
+            .First();
+        var selectedAmount = engineWinner.Key;
+        var winnerDigits = winner.Amount.ToString(CultureInfo.InvariantCulture);
+        var selectedDigits = selectedAmount.ToString(CultureInfo.InvariantCulture);
+        // A digit segmenter or AI line reader can clip the final narrow glyph. If
+        // Tesseract's supported whole-line value is exactly that result plus one
+        // trailing digit, keep the complete value and require confirmation instead
+        // of allowing two derived incomplete readers to shorten the payout.
+        if (winnerDigits.Length == selectedDigits.Length + 1 &&
+            winnerDigits.StartsWith(selectedDigits, StringComparison.Ordinal))
+        {
+            selectedAmount = winner.Amount;
+        }
+        else if (paddleAmount is long completePaddleAmount)
+        {
+            var paddleDigits = completePaddleAmount.ToString(CultureInfo.InvariantCulture);
+            var hasCurrencyPrefixEvidence = paddleWinner?.Any(reader =>
+                HasCurrencyPrefixEvidence(reader.RawText, paddleDigits)) == true;
+            if (hasCurrencyPrefixEvidence && paddleDigits.Length > selectedDigits.Length &&
+                paddleDigits.EndsWith(selectedDigits, StringComparison.Ordinal))
+            {
+                selectedAmount = completePaddleAmount;
+            }
+        }
+        var agreeingEngines = engineVotes.Count(amount => amount == selectedAmount);
+        var uncertainPositionSet = digitDiagnostics
+            .Where(digit => digit.IsUncertain)
+            .Select(digit => digit.Position)
+            .ToHashSet();
+        var engineDigitStrings = engineVotes
+            .Select(amount => amount.ToString(CultureInfo.InvariantCulture))
+            .ToArray();
+        if (engineDigitStrings.Length >= 2 &&
+            engineDigitStrings.All(value => value.Length == engineDigitStrings[0].Length))
+        {
+            for (var index = 0; index < engineDigitStrings[0].Length; index++)
+            {
+                if (engineDigitStrings.Select(value => value[index]).Distinct().Count() > 1)
+                {
+                    uncertainPositionSet.Add(index + 1);
+                }
+            }
+        }
+
+        var uncertainPositions = uncertainPositionSet
+            .OrderBy(position => position)
+            .Select(position => position.ToString(CultureInfo.InvariantCulture))
+            .ToArray();
+        var expectedDigitCount = selectedAmount.ToString(CultureInfo.InvariantCulture).Length;
         var symbolDigitCount = representative.Symbols?.Count(symbol =>
             symbol.Text.Length == 1 && char.IsDigit(symbol.Text[0]));
         var estimatedDigitCount = GetRepresentativeDigitCount([representative]);
         var segmentationAgrees = runTargetedFallback
-            ? segmentedAmount == winner.Amount &&
+            ? segmentedAmount == selectedAmount &&
                 digitDiagnostics.Count == expectedDigitCount &&
                 estimatedDigitCount == expectedDigitCount
             : symbolDigitCount == expectedDigitCount && estimatedDigitCount == expectedDigitCount;
-        var hasConflict = competing.Count > 0;
+        var hasEngineConflict = engineVotes.Any(amount => amount != selectedAmount);
+        var hasConflict = competing.Count > 0 || hasEngineConflict;
         var confidence = (float)Math.Clamp(
             (Math.Min(1, winner.Agreement / 4d) * 0.50) +
             (winner.AverageConfidence * 0.25) +
             (firstDiagnostics.AnchorConfidence * 0.25),
             0,
             1);
-        var strictAutomaticAdd = winner.Agreement >= MinimumIndependentReadersForAutomaticAdd &&
-            segmentationAgrees &&
-            uncertainPositions.Length == 0 &&
-            !hasConflict &&
+        var tesseractSupport = readers.Count(reader => reader.Amount == selectedAmount);
+        var paddleSupport = paddleReaders.Count(reader => reader.Amount == selectedAmount);
+        var tesseractAndPaddleAgree = winner.Amount == selectedAmount && paddleAmount == selectedAmount;
+        var thirdReaderAgrees = segmentedAmount == selectedAmount;
+        var matchingDigitCounts = winner.Amount.ToString(CultureInfo.InvariantCulture).Length == expectedDigitCount &&
+            paddleAmount?.ToString(CultureInfo.InvariantCulture).Length == expectedDigitCount &&
+            (segmentedAmount is null || segmentedAmount.Value.ToString(CultureInfo.InvariantCulture).Length == expectedDigitCount);
+        var engineConsensus = EvaluateEngineConsensus(
+            winner.Amount,
+            paddleAmount,
+            segmentedAmount,
+            tesseractSupport,
+            paddleSupport,
+            uncertainPositions.Length > 0,
+            competing.Count > 0);
+        var strictAutomaticAdd = engineConsensus.EligibleForAutomaticAdd &&
             firstDiagnostics.AnchorConfidence >= 0.60f &&
             confidence >= QuickCapturePolicy.AutomaticAddConfidenceThreshold;
         var competitorText = grouped.Count <= 1
@@ -261,19 +413,23 @@ public sealed class GtaLargeDigitReaderService
             : string.Join(", ", grouped.Skip(1).Select(group =>
                 $"{group.Amount.ToString("$#,##0", CultureInfo.GetCultureInfo("en-US"))} ({group.Agreement} readers)"));
         var reason = strictAutomaticAdd
-            ? $"Accepted: {winner.Agreement} independent readers and segmented digits agreed exactly with no competing value."
+            ? "Accepted: Tesseract, PaddleOCR, and the digit reader agreed exactly with no competing value."
             : hasConflict
-                ? "Confirmation required: similarly supported whole-number candidates disagree."
-                : !segmentationAgrees
-                    ? "Confirmation required: whole-line and segmented digit counts or values disagree."
+                ? "Confirmation required: one or more OCR engines produced a competing value."
+                : !tesseractAndPaddleAgree
+                    ? "Confirmation required: Tesseract and PaddleOCR did not agree exactly."
+                    : !thirdReaderAgrees
+                        ? "Confirmation required: the digit reader did not agree exactly."
+                    : !matchingDigitCounts
+                        ? "Confirmation required: reader digit counts disagree."
                     : uncertainPositions.Length > 0
                         ? $"Confirmation required: uncertain digit positions {string.Join(", ", uncertainPositions)}."
                         : $"Confirmation required: only {winner.Agreement} independent readers agreed; {MinimumIndependentReadersForAutomaticAdd} are required.";
         var rawText = $"{firstDiagnostics.AnchorOcrText}\n{representative.RawText}".Trim();
         var candidate = new DetectedPayout(
-            winner.Amount,
+            selectedAmount,
             rawText,
-            $"TOTAL CASH EARNED | {winner.Amount.ToString(CultureInfo.InvariantCulture)}",
+            $"TOTAL CASH EARNED | {selectedAmount.ToString(CultureInfo.InvariantCulture)}",
             PayoutDetectionMethod.GtaTotalCashEarnedResultScreen,
             $"Burst consensus: {representative.Method}",
             confidence,
@@ -294,7 +450,7 @@ public sealed class GtaLargeDigitReaderService
         var combinedDiagnostics = firstDiagnostics with
         {
             AmountCropBounds = amountCropBounds,
-            SelectedAmount = winner.Amount,
+            SelectedAmount = selectedAmount,
             AmountConfidence = confidence,
             SelectedPreprocessingMethod = representative.Method,
             SelectedPageSegmentationMode = representative.PageSegmentationMode,
@@ -308,10 +464,15 @@ public sealed class GtaLargeDigitReaderService
             Performance = performance,
             DigitOcrResults = digitDiagnostics,
             StableFrameCount = stableFrames.Count,
-            IndependentReaderAgreement = winner.Agreement,
+            IndependentReaderAgreement = agreeingEngines,
             UncertainDigitPositions = uncertainPositions.Length == 0
                 ? "None"
-                : string.Join(", ", uncertainPositions)
+                : string.Join(", ", uncertainPositions),
+            TesseractAmount = winner.Amount,
+            PaddleOcrAmount = paddleAmount,
+            DigitReaderAmount = segmentedAmount,
+            PaddleOcrStatus = _paddleOcr?.ModelStatus ?? "Not configured",
+            PaddleOcrProcessingMilliseconds = _paddleOcr?.LatestProcessingDuration?.TotalMilliseconds
         };
         var analysis = new PayoutAnalysisResult(
             candidate,
@@ -339,12 +500,31 @@ public sealed class GtaLargeDigitReaderService
                 variant,
                 segmentationMode,
                 cancellationToken);
+            if (recognition.Symbols is { Count: > 0 })
+            {
+                geometrySources.Add(new GeometryReaderSource(readerName, variant, recognition));
+            }
             var valid = GtaResultScreenDetectionService.TryNormalizeAmountText(
                 recognition.Text,
                 out var normalized,
                 out var amount,
                 out _,
                 out _);
+            IReadOnlyList<OcrSymbol>? candidateSymbols = recognition.Symbols;
+            if (valid && TryRemoveDollarSignMisreadAsFive(recognition, amount, out var correctedAmount))
+            {
+                amount = correctedAmount;
+                normalized = correctedAmount.ToString("$#,##0", CultureInfo.GetCultureInfo("en-US"));
+                var orderedSymbols = recognition.Symbols?
+                    .OrderBy(symbol => symbol.Left)
+                    .ToList();
+                var falseDollar = orderedSymbols?.FirstOrDefault(symbol => symbol.Text == "5");
+                if (falseDollar is not null)
+                {
+                    orderedSymbols!.Remove(falseDollar);
+                    candidateSymbols = orderedSymbols;
+                }
+            }
             var confidenceValue = QuickCapturePolicy.NormalizeConfidence(recognition.Confidence);
             ocrDiagnostics.Add(new GtaAmountOcrDiagnostic(
                 $"{readerName}: {variant.Method}",
@@ -364,9 +544,169 @@ public sealed class GtaLargeDigitReaderService
                     variant.Method,
                     segmentationMode.ToString(),
                     variant,
-                    recognition.Symbols));
+                    candidateSymbols));
             }
         }
+
+
+        void ReadPaddle(string readerName, BitmapSource crop)
+        {
+            if (_paddleOcr is null || !_paddleOcr.Enabled)
+            {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var recognition = _paddleOcr.Recognize(crop, cancellationToken);
+            ocrDiagnostics.Add(new GtaAmountOcrDiagnostic(
+                $"{readerName}: PaddleOCR",
+                "PaddleOCR AI",
+                recognition.RawText,
+                recognition.NormalizedDigits,
+                recognition.Confidence,
+                recognition.ParsedAmount,
+                recognition.Error ?? string.Empty));
+            if (recognition.IsValid && recognition.ParsedAmount is long amount &&
+                recognition.NormalizedDigits.Length >= 4)
+            {
+                paddleReaders.Add(new PaddleReaderResult(
+                    readerName,
+                    amount,
+                    recognition.RawText,
+                    recognition.Confidence));
+            }
+        }
+    }
+
+    private static bool TryRemoveDollarSignMisreadAsFive(
+        OcrRecognitionResult recognition,
+        long parsedAmount,
+        out long correctedAmount)
+    {
+        correctedAmount = parsedAmount;
+        var rawDigits = new string(recognition.Text.Where(char.IsDigit).ToArray());
+        var symbols = GetPlausibleDigitSymbols(recognition.Symbols);
+        if (!rawDigits.StartsWith('5') || rawDigits.Length < 5 ||
+            recognition.Text.Contains('$') || symbols is not { Length: >= 4 } ||
+            symbols[0].Text != "5")
+        {
+            return false;
+        }
+
+        var laterWidths = symbols.Skip(1)
+            .Select(symbol => Math.Max(1, symbol.Right - symbol.Left))
+            .OrderBy(width => width)
+            .ToArray();
+        var typicalWidth = laterWidths[(laterWidths.Length - 1) / 2];
+        var firstWidth = symbols[0].Right - symbols[0].Left;
+        var startsInCurrencyMargin = symbols[0].Left <= typicalWidth * 0.35;
+        var narrowerThanDigits = firstWidth <= typicalWidth * 0.90;
+        if (!startsInCurrencyMargin || !narrowerThanDigits ||
+            !long.TryParse(rawDigits[1..], NumberStyles.None, CultureInfo.InvariantCulture, out correctedAmount) ||
+            correctedAmount <= 0)
+        {
+            correctedAmount = parsedAmount;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void CorrectFalseDollarPrefixUsingWholeLineEvidence(List<ReaderResult> readers)
+    {
+        var dominant = readers
+            .GroupBy(reader => reader.Amount)
+            .OrderByDescending(group => group.Select(reader => reader.ReaderName).Distinct().Count())
+            .FirstOrDefault();
+        var source = dominant?
+            .Where(reader => reader.Symbols is { Count: >= 4 })
+            .FirstOrDefault();
+        if (dominant is null || source?.Symbols is not { Count: >= 4 })
+        {
+            return;
+        }
+
+        var dominantDigits = dominant.Key.ToString(CultureInfo.InvariantCulture);
+        if (!dominantDigits.StartsWith('5') || dominantDigits.Length < 5 ||
+            !long.TryParse(dominantDigits[1..], NumberStyles.None, CultureInfo.InvariantCulture, out var suffixAmount))
+        {
+            return;
+        }
+
+        // Do not remove a legitimate leading 5 based on shape alone. Require a
+        // separate whole-line pass that actually saw the currency marker and read
+        // the exact remaining sequence.
+        if (!readers.Any(reader =>
+                reader.Amount == suffixAmount && reader.RawText.Contains('$')))
+        {
+            return;
+        }
+
+        var symbols = GetPlausibleDigitSymbols(source.Symbols);
+        if (symbols.Length < 4 || symbols[0].Text != "5")
+        {
+            return;
+        }
+
+        var laterWidths = symbols.Skip(1)
+            .Select(symbol => Math.Max(1, symbol.Right - symbol.Left))
+            .OrderBy(width => width)
+            .ToArray();
+        var typicalWidth = laterWidths[(laterWidths.Length - 1) / 2];
+        var firstWidth = symbols[0].Right - symbols[0].Left;
+        if (symbols[0].Left > typicalWidth * 0.40 || firstWidth > typicalWidth * 0.95)
+        {
+            return;
+        }
+
+        for (var index = 0; index < readers.Count; index++)
+        {
+            var reader = readers[index];
+            if (reader.Amount != dominant.Key)
+            {
+                continue;
+            }
+
+            var correctedSymbols = reader.Symbols?
+                .Where(symbol => !(symbol.Text == "5" && symbol.Left == symbols[0].Left))
+                .ToArray();
+            readers[index] = reader with
+            {
+                Amount = suffixAmount,
+                Symbols = correctedSymbols
+            };
+        }
+    }
+
+    private static OcrSymbol[] GetPlausibleDigitSymbols(IReadOnlyList<OcrSymbol>? source)
+    {
+        var digits = source?
+            .Where(symbol => symbol.Text.Length == 1 && char.IsDigit(symbol.Text[0]))
+            .ToArray() ?? [];
+        if (digits.Length < 3)
+        {
+            return digits.OrderBy(symbol => symbol.Left).ToArray();
+        }
+
+        var widths = digits
+            .Select(symbol => Math.Max(1, symbol.Right - symbol.Left))
+            .OrderBy(width => width)
+            .ToArray();
+        var typicalWidth = widths[(widths.Length - 1) / 2];
+        return digits
+            // Tesseract occasionally emits a page-sized duplicate symbol on top
+            // of otherwise correct per-character boxes. It is not a digit cell.
+            .Where(symbol => symbol.Right - symbol.Left <= typicalWidth * 2.5)
+            .OrderBy(symbol => symbol.Left)
+            .ToArray();
+    }
+
+    private static bool HasCurrencyPrefixEvidence(string rawText, string normalizedDigits)
+    {
+        var compact = new string(rawText.Where(character => !char.IsWhiteSpace(character)).ToArray());
+        return compact.Length == normalizedDigits.Length + 1 &&
+            compact[1..] == normalizedDigits &&
+            compact[0] is '$' or 'a' or 'A' or 'c' or 'C' or 'g' or 'G';
     }
 
     private static int? GetRepresentativeDigitCount(IReadOnlyList<ReaderResult> readers)
@@ -783,6 +1123,426 @@ public sealed class GtaLargeDigitReaderService
         }
     }
 
+    private void AddFixedPitchGeometryReader(
+        List<ReaderResult> readers,
+        IReadOnlyList<GeometryReaderSource> sources,
+        List<GtaAmountOcrDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var source = sources
+            .Select(item => new
+            {
+                Source = item,
+                Symbols = item.Recognition.Symbols!
+                    .Where(symbol => symbol.Text.Length == 1 && char.IsDigit(symbol.Text[0]))
+                    .OrderBy(symbol => symbol.Left)
+                    .ToArray()
+            })
+            .Where(item => item.Symbols.Length > 0)
+            .Select(item => new
+            {
+                item.Source,
+                item.Symbols,
+                Height = item.Symbols
+                    .Select(symbol => Math.Max(1, symbol.Bottom - symbol.Top))
+                    .OrderBy(height => height)
+                    .ElementAt(item.Symbols.Length / 2),
+                Span = item.Symbols.Max(symbol => symbol.Right) - item.Symbols.Min(symbol => symbol.Left)
+            })
+            .Where(item => item.Height >= 24 && item.Span / (double)item.Height >= 2.4)
+            .OrderByDescending(item => item.Span / (double)item.Height)
+            .ThenByDescending(item => item.Symbols.Length)
+            .FirstOrDefault();
+        if (source is null)
+        {
+            return;
+        }
+
+        var plausibleWidths = source.Symbols
+            .Select(symbol => Math.Max(1, symbol.Right - symbol.Left))
+            .Where(width => width >= source.Height * 0.35 && width <= source.Height * 0.95)
+            .OrderBy(width => width)
+            .ToArray();
+        var cellWidth = plausibleWidths.Length > 0
+            ? plausibleWidths[(plausibleWidths.Length - 1) / 2]
+            : Math.Max(8, (int)Math.Round(source.Height * 0.72));
+        var sourceImage = Decode(source.Source.Variant);
+        var cells = new List<Int32Rect>();
+        foreach (var symbol in source.Symbols)
+        {
+            var symbolWidth = Math.Max(1, symbol.Right - symbol.Left);
+            var slotCount = Math.Clamp((int)Math.Round(symbolWidth / (double)cellWidth), 1, 10);
+            var slotWidth = symbolWidth / (double)slotCount;
+            for (var slot = 0; slot < slotCount; slot++)
+            {
+                cells.Add(ClampBounds(sourceImage, new Int32Rect(
+                    (int)Math.Round(symbol.Left + (slot * slotWidth)),
+                    symbol.Top,
+                    Math.Max(1, (int)Math.Round(slotWidth)),
+                    Math.Max(1, symbol.Bottom - symbol.Top))));
+            }
+        }
+
+        if (cells.Count is < 4 or > 10)
+        {
+            return;
+        }
+
+        if (_paddleOcr?.Enabled == true)
+        {
+            for (var start = 1; start < cells.Count; start += 2)
+            {
+                var end = Math.Min(cells.Count - 1, start + 1);
+                var left = cells[start].X;
+                var top = Math.Min(cells[start].Y, cells[end].Y);
+                var right = cells[end].X + cells[end].Width;
+                var bottom = Math.Max(cells[start].Y + cells[start].Height, cells[end].Y + cells[end].Height);
+                var bounds = ClampBounds(sourceImage, new Int32Rect(
+                    left,
+                    top,
+                    Math.Max(1, right - left),
+                    Math.Max(1, bottom - top)));
+                var window = Crop(sourceImage, bounds);
+                var paddleWindow = _paddleOcr.Recognize(window, cancellationToken);
+                var tesseractWindowVariant = _preprocessing.CreateCharacterVariant(
+                    sourceImage,
+                    bounds,
+                    $"Fixed-pitch window {start + 1}-{end + 1}");
+                var tesseractWindow = _amountOcr.RecognizeAmount(
+                    tesseractWindowVariant,
+                    OcrAmountPageSegmentation.SingleLine,
+                    cancellationToken);
+                diagnostics.Add(new GtaAmountOcrDiagnostic(
+                    tesseractWindowVariant.Method,
+                    "Geometry window",
+                    $"Tesseract={tesseractWindow.Text}; Paddle={paddleWindow.RawText}",
+                    paddleWindow.NormalizedDigits,
+                    Math.Max(QuickCapturePolicy.NormalizeConfidence(tesseractWindow.Confidence), paddleWindow.Confidence),
+                    paddleWindow.ParsedAmount,
+                    $"cell={bounds.X},{bounds.Y},{bounds.Width},{bounds.Height}"));
+            }
+        }
+
+        var digits = new List<char>(cells.Count);
+        var confidences = new List<float>(cells.Count);
+        for (var index = 0; index < cells.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var cell = cells[index];
+            var paddingX = Math.Max(2, cell.Width / 14);
+            var paddingY = Math.Max(2, cell.Height / 14);
+            var padded = ClampBounds(sourceImage, new Int32Rect(
+                cell.X - paddingX,
+                cell.Y - paddingY,
+                cell.Width + (paddingX * 2),
+                cell.Height + (paddingY * 2)));
+            var variant = _preprocessing.CreateCharacterVariant(
+                sourceImage,
+                padded,
+                $"Fixed-pitch digit {index + 1}");
+            var recognition = _amountOcr.RecognizeAmountCharacter(variant, cancellationToken);
+            var digit = recognition.Text.FirstOrDefault(char.IsDigit);
+            var confidence = QuickCapturePolicy.NormalizeConfidence(recognition.Confidence);
+            PaddleOcrRecognitionResult? paddleRecognition = null;
+            if (_paddleOcr?.Enabled == true)
+            {
+                paddleRecognition = _paddleOcr.Recognize(Decode(variant), cancellationToken);
+                if (digit == default && paddleRecognition.NormalizedDigits.Length == 1)
+                {
+                    digit = paddleRecognition.NormalizedDigits[0];
+                    confidence = paddleRecognition.Confidence;
+                }
+            }
+            var topology = AnalyzeEnclosedRegions(Decode(variant));
+            if (digit == default)
+            {
+                digit = topology.Count switch
+                {
+                    >= 2 => '8',
+                    1 when topology.TopmostCenterYRatio is < 0.43 => '9',
+                    1 when topology.TopmostCenterYRatio is > 0.57 => '6',
+                    1 => '0',
+                    _ => default
+                };
+            }
+
+            diagnostics.Add(new GtaAmountOcrDiagnostic(
+                variant.Method,
+                "SingleChar geometry",
+                recognition.Text,
+                digit == default ? string.Empty : digit.ToString(),
+                confidence,
+                digit == default ? null : digit - '0',
+                $"cell={padded.X},{padded.Y},{padded.Width},{padded.Height}; Paddle={paddleRecognition?.RawText ?? "--"}; loops={topology.Count}; upper={topology.TopmostCenterYRatio:0.00}"));
+
+            // The first fixed-pitch cell may be the narrow dollar glyph. It is the
+            // only cell allowed to produce no digit; gaps inside the number make
+            // the geometry reader incomplete and therefore unusable.
+            if (digit == default && index == 0)
+            {
+                continue;
+            }
+            if (digit == default)
+            {
+                digits.Add('?');
+                confidences.Add(0);
+                continue;
+            }
+
+            digits.Add(digit);
+            confidences.Add(confidence);
+        }
+
+        var digitText = new string(digits.ToArray());
+        if (digitText.Contains('?') || digitText.Length < 4 || digitText[0] == '0' ||
+            !long.TryParse(digitText, NumberStyles.None, CultureInfo.InvariantCulture, out var amount) ||
+            amount <= 0 || amount > PayoutDetectionService.MaximumPayout)
+        {
+            return;
+        }
+
+        readers.Add(new ReaderResult(
+            "Fixed-pitch geometry digit reader",
+            amount,
+            digitText,
+            confidences.Count == 0 ? 0 : confidences.Average(),
+            "Fixed-pitch merged-glyph segmentation",
+            "SingleChar geometry",
+            source.Source.Variant,
+            null));
+    }
+
+    private void AddProjectionSegmentedReader(
+        List<ReaderResult> readers,
+        BitmapSource amountCrop,
+        List<GtaAmountOcrDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var maskVariant = _preprocessing.CreateRockstarOverlayVariant(amountCrop);
+        var mask = Decode(maskVariant);
+        var pixels = CopyBgra(mask);
+        var rowCounts = new int[mask.PixelHeight];
+        for (var y = 0; y < mask.PixelHeight; y++)
+        {
+            var count = 0;
+            for (var x = 0; x < mask.PixelWidth; x++)
+            {
+                if (Luminance(pixels, ((y * mask.PixelWidth) + x) * 4) >= 200)
+                {
+                    count++;
+                }
+            }
+            rowCounts[y] = count;
+        }
+
+        var rowThreshold = Math.Max(4, mask.PixelWidth / 50);
+        var rowRuns = FindProjectionRuns(rowCounts, rowThreshold, bridgeGap: 2)
+            .Where(run => run.Length >= Math.Max(24, mask.PixelHeight / 5))
+            .OrderByDescending(run => run.Length * rowCounts.Skip(run.Start).Take(run.Length).Average())
+            .ToArray();
+        if (rowRuns.Length == 0)
+        {
+            return;
+        }
+
+        var rowRun = rowRuns[0];
+        var columnCounts = new int[mask.PixelWidth];
+        for (var x = 0; x < mask.PixelWidth; x++)
+        {
+            var count = 0;
+            for (var y = rowRun.Start; y < rowRun.Start + rowRun.Length; y++)
+            {
+                if (Luminance(pixels, ((y * mask.PixelWidth) + x) * 4) >= 200)
+                {
+                    count++;
+                }
+            }
+            columnCounts[x] = count;
+        }
+
+        // Require a substantial vertical stroke contribution. A very low
+        // threshold lets the horizontal bar of GTA's tightly kerned "41" join
+        // both glyphs into one projection component.
+        var columnThreshold = Math.Max(3, rowRun.Length / 4);
+        var rawGlyphRuns = FindProjectionRuns(columnCounts, columnThreshold, bridgeGap: 3)
+            .Where(run => run.Length >= Math.Max(8, rowRun.Length / 12))
+            .Take(11)
+            .ToArray();
+        var typicalGlyphWidth = rawGlyphRuns
+            .Where(run => run.Length >= rowRun.Length * 0.50)
+            .Select(run => run.Length)
+            .OrderBy(width => width)
+            .DefaultIfEmpty(Math.Max(8, rowRun.Length * 2 / 3))
+            .ElementAt(rawGlyphRuns.Count(run => run.Length >= rowRun.Length * 0.50) / 2);
+        var glyphRuns = new List<ProjectionGlyph>();
+        for (var index = 0; index < rawGlyphRuns.Length; index++)
+        {
+            var run = rawGlyphRuns[index];
+            if (run.Length < typicalGlyphWidth * 0.62 && index + 1 < rawGlyphRuns.Length)
+            {
+                var next = rawGlyphRuns[index + 1];
+                var gap = next.Start - (run.Start + run.Length);
+                if (next.Length < typicalGlyphWidth * 0.62 && gap <= typicalGlyphWidth * 0.25)
+                {
+                    glyphRuns.Add(new ProjectionGlyph(
+                        run.Start,
+                        next.Start + next.Length - run.Start,
+                        IsRockstarFour: true));
+                    index++;
+                    continue;
+                }
+            }
+
+            glyphRuns.Add(new ProjectionGlyph(run.Start, run.Length, IsRockstarFour: false));
+        }
+        if (glyphRuns.Count is < 5 or > 10)
+        {
+            return;
+        }
+
+        var digits = new List<char>(glyphRuns.Count);
+        var confidences = new List<float>(glyphRuns.Count);
+        for (var index = 0; index < glyphRuns.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var run = glyphRuns[index];
+            var paddingX = Math.Max(2, run.Length / 14);
+            var paddingY = Math.Max(2, rowRun.Length / 16);
+            var bounds = ClampBounds(mask, new Int32Rect(
+                run.Start - paddingX,
+                rowRun.Start - paddingY,
+                run.Length + (paddingX * 2),
+                rowRun.Length + (paddingY * 2)));
+            var cellVariant = _preprocessing.CreateCharacterVariant(
+                mask,
+                bounds,
+                $"Projection Rockstar digit {index + 1}");
+            var tesseract = _amountOcr.RecognizeAmountCharacter(cellVariant, cancellationToken);
+            var lineTesseract = _amountOcr.RecognizeAmount(
+                cellVariant,
+                OcrAmountPageSegmentation.SingleLine,
+                cancellationToken);
+            var recognizedDigits = new string(lineTesseract.Text.Where(char.IsDigit).ToArray());
+            if (recognizedDigits.Length is 0 or > 2)
+            {
+                recognizedDigits = new string(tesseract.Text.Where(char.IsDigit).Take(1).ToArray());
+            }
+            var confidence = Math.Max(
+                QuickCapturePolicy.NormalizeConfidence(tesseract.Confidence),
+                QuickCapturePolicy.NormalizeConfidence(lineTesseract.Confidence));
+            PaddleOcrRecognitionResult? paddle = null;
+            if (_paddleOcr?.Enabled == true)
+            {
+                paddle = _paddleOcr.Recognize(Decode(cellVariant), cancellationToken);
+                if (recognizedDigits.Length == 0 && paddle.NormalizedDigits.Length is 1 or 2)
+                {
+                    recognizedDigits = paddle.NormalizedDigits;
+                    confidence = paddle.Confidence;
+                }
+            }
+
+            var topology = AnalyzeEnclosedRegions(Decode(cellVariant));
+            if (run.IsRockstarFour)
+            {
+                recognizedDigits = "4";
+                confidence = Math.Max(confidence, 0.85f);
+            }
+            if (recognizedDigits.Length == 0)
+            {
+                var topologyDigit = topology.Count switch
+                {
+                    >= 2 => '8',
+                    1 when topology.TopmostCenterYRatio is < 0.43 => '9',
+                    1 when topology.TopmostCenterYRatio is > 0.57 => '6',
+                    1 => '0',
+                    _ => default
+                };
+                if (topologyDigit != default)
+                {
+                    recognizedDigits = topologyDigit.ToString();
+                }
+            }
+
+            diagnostics.Add(new GtaAmountOcrDiagnostic(
+                cellVariant.Method,
+                "Projection SingleChar",
+                $"Tesseract char={tesseract.Text}; line={lineTesseract.Text}; Paddle={paddle?.RawText ?? "--"}",
+                recognizedDigits,
+                confidence,
+                long.TryParse(recognizedDigits, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedCell)
+                    ? parsedCell
+                    : null,
+                $"cell={bounds.X},{bounds.Y},{bounds.Width},{bounds.Height}; loops={topology.Count}; upper={topology.TopmostCenterYRatio:0.00}"));
+
+            // The first projection component is the dollar sign. It is never part
+            // of the numeric sequence, even if an OCR engine calls it 5 or 9.
+            if (index == 0)
+            {
+                continue;
+            }
+            if (recognizedDigits.Length == 0)
+            {
+                digits.Add('?');
+                confidences.Add(0);
+                continue;
+            }
+
+            digits.AddRange(recognizedDigits);
+            confidences.AddRange(Enumerable.Repeat(confidence, recognizedDigits.Length));
+        }
+
+        var digitText = new string(digits.ToArray());
+        if (digitText.Contains('?') || digitText.Length < 4 || digitText[0] == '0' ||
+            !long.TryParse(digitText, NumberStyles.None, CultureInfo.InvariantCulture, out var amount) ||
+            amount <= 0 || amount > PayoutDetectionService.MaximumPayout)
+        {
+            return;
+        }
+
+        readers.Add(new ReaderResult(
+            "Rockstar projection digit reader",
+            amount,
+            digitText,
+            confidences.Count == 0 ? 0 : confidences.Average(),
+            maskVariant.Method,
+            "Projection SingleChar",
+            maskVariant,
+            null));
+    }
+
+    private static IReadOnlyList<ProjectionRun> FindProjectionRuns(
+        IReadOnlyList<int> values,
+        int threshold,
+        int bridgeGap)
+    {
+        var runs = new List<ProjectionRun>();
+        var start = -1;
+        var lastActive = -1;
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (values[index] >= threshold)
+            {
+                if (start < 0)
+                {
+                    start = index;
+                }
+                lastActive = index;
+            }
+            else if (start >= 0 && index - lastActive > bridgeGap)
+            {
+                runs.Add(new ProjectionRun(start, lastActive - start + 1));
+                start = -1;
+                lastActive = -1;
+            }
+        }
+
+        if (start >= 0)
+        {
+            runs.Add(new ProjectionRun(start, lastActive - start + 1));
+        }
+        return runs;
+    }
+
     private static void RecoverTrailingDigitWhenSupported(
         List<ReaderResult> readers,
         IReadOnlyList<GtaAmountOcrDiagnostic> probeDiagnostics)
@@ -944,6 +1704,7 @@ public sealed class GtaLargeDigitReaderService
         return kind switch
         {
             VariantKind.LocalContrast => _preprocessing.CreateLocalContrastVariant(source),
+            VariantKind.RockstarOverlay => _preprocessing.CreateRockstarOverlayVariant(source),
             VariantKind.GreenSuppression => _preprocessing.CreateGreenSuppressionVariant(source),
             VariantKind.ClosedMask => _preprocessing.CreateClosedTextVariant(source),
             VariantKind.NeutralBrightness => _preprocessing.CreateNeutralBrightnessVariant(source),
@@ -1234,6 +1995,7 @@ public sealed class GtaLargeDigitReaderService
     private enum VariantKind
     {
         LowSaturation,
+        RockstarOverlay,
         ClosedMask,
         NeutralBrightness,
         GreenSuppression,
@@ -1249,6 +2011,21 @@ public sealed class GtaLargeDigitReaderService
         string PageSegmentationMode,
         PreprocessedImage Variant,
         IReadOnlyList<OcrSymbol>? Symbols);
+
+    private sealed record PaddleReaderResult(
+        string ReaderName,
+        long Amount,
+        string RawText,
+        float Confidence);
+
+    private sealed record GeometryReaderSource(
+        string ReaderName,
+        PreprocessedImage Variant,
+        OcrRecognitionResult Recognition);
+
+    private sealed record ProjectionRun(int Start, int Length);
+
+    private sealed record ProjectionGlyph(int Start, int Length, bool IsRockstarFour);
 
     private sealed record EnclosedRegionAnalysis(int Count, double? TopmostCenterYRatio);
 }

@@ -20,7 +20,7 @@ public partial class MainWindow : Window
 {
     public const double CompactWindowWidth = 420;
     public const double CompactNormalHeight = 340;
-    public const double CompactPendingHeight = 460;
+    public const double CompactPendingHeight = 610;
 
     private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
     private static readonly NumberStyles AcceptedAmountStyles =
@@ -42,6 +42,7 @@ public partial class MainWindow : Window
     private readonly OcrService _ocrService = new();
     private readonly OcrService _headingOcrService = new(OcrWorkerKind.Heading);
     private readonly OcrService _amountOcrService = new(OcrWorkerKind.Amount);
+    private readonly PaddleOcrRecognitionService _paddleOcrService = new();
     private readonly PayoutDetectionService _payoutDetectionService;
     private readonly GtaLargeDigitReaderService _largeDigitReaderService;
     private readonly ContinuousScreenCaptureService _continuousCaptureService;
@@ -54,6 +55,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _quickCaptureNotificationTimer;
     private readonly DispatcherTimer _settingsSaveTimer;
     private readonly object _captureExclusionLock = new();
+    private readonly List<PendingScanAttempt> _pendingScanAttempts = [];
 
     private List<EarningRecord> _earnings = [];
     private CaptureSettings _captureSettings = new();
@@ -79,6 +81,7 @@ public partial class MainWindow : Window
     private bool _resumeLivePreviewAfterShow;
     private bool _resumeScannerAfterShow;
     private bool _suppressSettingsUiEvents;
+    private bool _rescanInProgress;
     private string _selectedTab = "Dashboard";
     private GtaResultScreenDiagnostics? _latestGtaDiagnostics;
     private Int32Rect? _windowPhysicalBounds;
@@ -87,6 +90,8 @@ public partial class MainWindow : Window
         GlobalHotkeyModifiers.Control | GlobalHotkeyModifiers.Shift;
     private uint _proposedHotkeyVirtualKey = 0x48;
     private string _proposedHotkeyText = "Ctrl + Shift + H";
+
+    private sealed record PendingScanAttempt(long? Amount, int AgreeingReaders, bool Recognized);
 
     public MainWindow()
     {
@@ -100,7 +105,8 @@ public partial class MainWindow : Window
             _amountOcrService);
         _largeDigitReaderService = new GtaLargeDigitReaderService(
             _payoutDetectionService,
-            _amountOcrService);
+            _amountOcrService,
+            _paddleOcrService);
         _continuousCaptureService = new ContinuousScreenCaptureService(_screenCaptureService);
         _backgroundScannerService = new BackgroundScannerService(
             _continuousCaptureService,
@@ -180,6 +186,7 @@ public partial class MainWindow : Window
         var hasValidSavedArea = savedCaptureSettings.CaptureAreaConfirmed &&
             _screenCaptureService.IsValidCaptureArea(savedCaptureSettings);
         _captureSettings = savedCaptureSettings;
+        _paddleOcrService.Enabled = _captureSettings.PaddleOcrEnabled;
         if (!hasValidSavedArea)
         {
             _captureSettings.X = 0;
@@ -209,6 +216,7 @@ public partial class MainWindow : Window
         RegisterConfiguredHotkey();
         _refreshTimer.Start();
         _isLoaded = true;
+        _ = InitializePaddleOcrStatusAsync();
         AutomaticDetectionCheckBox.IsChecked = false;
         UpdateWindowCaptureBounds();
         if (!hasValidSavedArea)
@@ -324,6 +332,8 @@ public partial class MainWindow : Window
         {
             // Application shutdown must continue even if the native OCR runtime is already unloading.
         }
+
+        _paddleOcrService.Dispose();
 
         _discordWebhookService.Dispose();
         _automaticDetectionCancellation?.Dispose();
@@ -587,16 +597,36 @@ public partial class MainWindow : Window
 
     private async void QuickCaptureButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunQuickCaptureAsync(_shutdownCancellation.Token);
+        await RunQuickCaptureAsync(_shutdownCancellation.Token, ScanRequestMode.Normal);
     }
 
-    private async Task RunQuickCaptureAsync(CancellationToken cancellationToken)
+    private async Task RunQuickCaptureAsync(
+        CancellationToken cancellationToken,
+        ScanRequestMode requestMode = ScanRequestMode.Normal)
     {
         if (!HasConfirmedCaptureArea())
         {
             ShowCaptureSetupState();
             ShowQuickCaptureStatusNotification("Select a payout area before scanning.");
             return;
+        }
+
+        var forcedRescan = requestMode == ScanRequestMode.ForcedRescan;
+        var previousCandidate = forcedRescan ? _pendingDetectedPayout : null;
+        if (forcedRescan && (previousCandidate is null || _rescanInProgress))
+        {
+            return;
+        }
+
+        if (forcedRescan)
+        {
+            _rescanInProgress = true;
+            SetPendingResultButtonsEnabled(false);
+            ExpandedRescanButton.Content = "RESCANNING…";
+            CompactRescanButton.Content = "RESCANNING…";
+            ShowPreviousResult(previousCandidate!, "Previous result retained while a fresh five-frame scan runs.");
+            ConfirmationVerificationStatusText.Text = "RESCANNING…";
+            CompactVerificationStatusText.Text = "RESCANNING…";
         }
 
         SetQuickCaptureProcessing(isProcessing: true);
@@ -695,11 +725,18 @@ public partial class MainWindow : Window
             }
 
             var analysis = selectedResult.Analysis;
+            if (forcedRescan && analysis.GtaResultDiagnostics is not null)
+            {
+                analysis = analysis with
+                {
+                    GtaResultDiagnostics = analysis.GtaResultDiagnostics with { ForcedRescan = true }
+                };
+            }
             SetQuickScanState("Reading amount…", "ANALYZING…");
             CapturePreviewImage.Source = selectedResult.PreviewFrame;
             CapturePreviewPlaceholderText.Visibility = Visibility.Collapsed;
             UpdateOcrDiagnostics(analysis);
-            await HandleQuickCaptureAnalysisAsync(analysis);
+            await HandleQuickCaptureAnalysisAsync(analysis, requestMode, previousCandidate);
         }
         catch (OperationCanceledException)
         {
@@ -751,6 +788,13 @@ public partial class MainWindow : Window
             if (!_isClosing)
             {
                 SetQuickCaptureProcessing(isProcessing: false);
+                if (forcedRescan)
+                {
+                    _rescanInProgress = false;
+                    ExpandedRescanButton.Content = "RESCAN";
+                    CompactRescanButton.Content = "RESCAN";
+                    SetPendingResultButtonsEnabled(true);
+                }
                 UpdateDashboardStatus();
             }
         }
@@ -791,11 +835,29 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task HandleQuickCaptureAnalysisAsync(PayoutAnalysisResult analysis)
+    private async Task HandleQuickCaptureAnalysisAsync(
+        PayoutAnalysisResult analysis,
+        ScanRequestMode requestMode,
+        DetectedPayout? previousCandidate)
     {
         var candidate = analysis.Candidate;
         if (candidate is null)
         {
+            if (requestMode == ScanRequestMode.ForcedRescan && previousCandidate is not null)
+            {
+                _pendingDetectedPayout = previousCandidate;
+                RecordFailedScanAttempt();
+                ShowPreviousResult(previousCandidate, "No new payout result was recognized.");
+                SetVerificationStatus(previousCandidate, _latestGtaDiagnostics);
+                PayoutConfirmationCard.Visibility = Visibility.Visible;
+                CompactPendingIndicator.Visibility = Visibility.Visible;
+                CompactNormalPanel.Visibility = Visibility.Collapsed;
+                QuickCaptureStatusText.Text = "No new payout result was recognized.";
+                OcrStatusText.Text = "No new payout result was recognized.";
+                DiagnosticStatusText.Text = "Scan status: Forced rescan found no new candidate";
+                return;
+            }
+
             _duplicateGuard.RecordNoCandidate(analysis.ImageFingerprint);
             var anchorMissing = analysis.GtaResultDiagnostics?.AnchorFound != true;
             var message = anchorMissing
@@ -811,14 +873,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_pendingDetectedPayout is not null)
+        if (_pendingDetectedPayout is not null && requestMode == ScanRequestMode.Normal)
         {
             QuickCaptureStatusText.Text = "A payout is already waiting for confirmation.";
             ShowQuickCaptureStatusNotification("A payout is already waiting for confirmation.");
             return;
         }
 
-        if (!_duplicateGuard.ShouldPresent(candidate, DateTime.UtcNow))
+        if (!_duplicateGuard.ShouldPresent(candidate, DateTime.UtcNow, requestMode))
         {
             QuickCaptureStatusText.Text = "Duplicate result ignored.";
             OcrStatusText.Text = "Duplicate on-screen notification ignored.";
@@ -836,14 +898,26 @@ public partial class MainWindow : Window
         }
 
         PresentPayoutCandidate(candidate, "Quick Scan");
+        ExpandedPreviousResultBorder.Visibility = Visibility.Collapsed;
+        CompactPreviousResultBorder.Visibility = Visibility.Collapsed;
         SetQuickScanState("Verify detected amount", "QUICK SCAN");
         QuickCaptureStatusText.Text = candidate.IsAmbiguous
             ? "Reader results disagree. Check or edit the amount before saving."
-            : "Check the detected amount, then confirm, edit, or reject it.";
+            : "Check the detected amount, then accept, edit, rescan, or reject it.";
         OcrStatusText.Text = "Quick Scan result is waiting for your confirmation.";
         DiagnosticStatusText.Text = "Scan status: Quick Scan awaiting manual verification";
         ShowQuickCaptureStatusNotification("Verify the detected payout before saving.");
         await Task.CompletedTask;
+    }
+
+    private async void RescanPayoutButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pendingDetectedPayout is null || _rescanInProgress)
+        {
+            return;
+        }
+
+        await RunQuickCaptureAsync(_shutdownCancellation.Token, ScanRequestMode.ForcedRescan);
     }
 
     private async void AutomaticDetectionCheckBox_Checked(object sender, RoutedEventArgs e)
@@ -1020,13 +1094,18 @@ public partial class MainWindow : Window
         var decision = QuickCapturePolicy.Evaluate(candidate, requireManualConfirmation: false);
         if (decision == QuickCaptureDecision.AutomaticallyAdd)
         {
+            if (!_duplicateGuard.CanSave(candidate))
+            {
+                return;
+            }
+
             var saved = await SaveEarningAmountAsync(candidate.Amount, "Automatic Detection");
             if (saved is null)
             {
                 return;
             }
 
-            _duplicateGuard.RecordDismissal(candidate, DateTime.UtcNow);
+            _duplicateGuard.RecordSaved(candidate, DateTime.UtcNow);
             if (IsVisible)
             {
                 OcrStatusText.Text = $"Automatically added {FormatMoney(candidate.Amount)}.";
@@ -1194,7 +1273,12 @@ public partial class MainWindow : Window
             $"Selected variant: {gta.SelectedPreprocessingMethod} / {gta.SelectedPageSegmentationMode}",
             $"Agreeing variants: {gta.AgreeingVariantCount}",
             $"Stable burst frames: {gta.StableFrameCount}",
+            $"Forced rescan: {(gta.ForcedRescan ? "Yes" : "No")}",
             $"Independent readers: {gta.IndependentReaderAgreement}",
+            $"Tesseract: {(gta.TesseractAmount is long tesseractAmount ? FormatMoney(tesseractAmount) : "No valid candidate")}",
+            $"PaddleOCR: {(gta.PaddleOcrAmount is long paddleAmount ? FormatMoney(paddleAmount) : gta.PaddleOcrStatus)}",
+            $"Digit reader: {(gta.DigitReaderAmount is long digitAmount ? FormatMoney(digitAmount) : "No valid candidate")}",
+            $"PaddleOCR processing: {(gta.PaddleOcrProcessingMilliseconds is double paddleMs ? $"{paddleMs:0.0} ms" : "--")}",
             $"Competing candidates: {gta.CompetingCandidates}",
             $"Uncertain digit positions: {gta.UncertainDigitPositions}",
             $"Automatic-add decision: {(gta.AutomaticAddAccepted ? "accepted" : "confirmation required")}",
@@ -1242,6 +1326,8 @@ public partial class MainWindow : Window
                         $"confidence {digit.Confidence:P0} | holes {digit.EnclosedRegionCount?.ToString() ?? "--"} | " +
                         $"{digit.ShapeSupport}"));
         }
+
+        UpdatePaddleOcrStatus();
 
         GtaHeadingCropPreview.Source = gta.HeadingCropPreview;
         GtaAmountCropPreview.Source = gta.AmountCropPreview;
@@ -1294,7 +1380,7 @@ public partial class MainWindow : Window
         _pendingPayoutSource = source;
         var isTotalCashEarned = IsTotalCashEarnedDetection(candidate.DetectionMethod);
         ConfirmationHeadingText.Text = isTotalCashEarned
-            ? "Total Cash Earned detected"
+            ? "PAYOUT FOUND — VERIFY BEFORE SAVING"
             : "PAYOUT REQUIRES CONFIRMATION";
         DetectedPayoutText.Text = isTotalCashEarned
             ? $"Amount: {FormatMoney(candidate.Amount)}"
@@ -1311,29 +1397,30 @@ public partial class MainWindow : Window
             ? "Independent readers: unavailable"
             : string.Join(
                 Environment.NewLine,
-                $"Independent readers agreeing: {diagnostics.IndependentReaderAgreement}",
+                FormatReaderResult("Tesseract", diagnostics.TesseractAmount),
+                FormatReaderResult("PaddleOCR", diagnostics.PaddleOcrAmount),
+                FormatReaderResult("Digit reader", diagnostics.DigitReaderAmount),
+                $"Readers agreeing: {diagnostics.IndependentReaderAgreement} of 3",
                 $"Digit count: {candidate.Amount.ToString(CultureInfo.InvariantCulture).Length}",
                 $"Competing candidates: {diagnostics.CompetingCandidates}",
                 $"Uncertain digit positions: {diagnostics.UncertainDigitPositions}");
         ConfirmationAmountCropImage.Source = diagnostics?.AmountCropPreview;
-        ConfirmationProcessedCropImage.Source = diagnostics?.BestProcessedAmountPreview;
-        ConfirmationPreviewPanel.Visibility =
-            diagnostics?.AmountCropPreview is not null || diagnostics?.BestProcessedAmountPreview is not null
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+        ConfirmationPreviewPanel.Visibility = diagnostics?.AmountCropPreview is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         PayoutConfirmationCard.Visibility = Visibility.Visible;
         CompactPendingIndicator.Visibility = Visibility.Visible;
         CompactNormalPanel.Visibility = Visibility.Collapsed;
         CompactEditPanel.Visibility = Visibility.Collapsed;
         CompactPendingText.Text = FormatMoney(candidate.Amount);
         CompactPendingMetaText.Text =
-            $"Confidence: {QuickCapturePolicy.NormalizeConfidence(candidate.Confidence):P0}  •  Readers agreeing: {diagnostics?.IndependentReaderAgreement ?? 0}";
-        CompactPendingConflictText.Text = diagnostics is null || diagnostics.CompetingCandidates == "None"
-            ? "Possible conflict: None"
-            : $"Alternative: {diagnostics.CompetingCandidates}  •  Uncertain digit: {diagnostics.UncertainDigitPositions}";
+            $"Confidence: {QuickCapturePolicy.NormalizeConfidence(candidate.Confidence):P0}  •  Readers agreeing: {diagnostics?.IndependentReaderAgreement ?? 0} of 3";
+        CompactPendingConflictText.Text = FormatPossibleAlternatives(candidate.Amount, diagnostics);
         CompactPendingPreviewImage.Source = diagnostics?.AmountCropPreview;
+        SetVerificationStatus(candidate, diagnostics);
+        RecordScanAttempt(candidate, diagnostics?.IndependentReaderAgreement ?? 0);
         ExpandedEditPanel.Visibility = Visibility.Collapsed;
-        OcrStatusText.Text = "Payout candidate detected. Confirm, reject, or edit it.";
+        OcrStatusText.Text = "Payout candidate detected. Accept, edit, rescan, or reject it.";
         DiagnosticStatusText.Text = "Scan status: Candidate awaiting manual confirmation";
         _backgroundScannerService.SetPaused(paused: true);
         if (_isCompactMode)
@@ -1347,6 +1434,125 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SetPendingResultButtonsEnabled(bool enabled)
+    {
+        ExpandedAcceptButton.IsEnabled = enabled;
+        ExpandedEditButton.IsEnabled = enabled;
+        ExpandedRescanButton.IsEnabled = enabled;
+        ExpandedRejectButton.IsEnabled = enabled;
+        CompactAcceptButton.IsEnabled = enabled;
+        CompactEditButton.IsEnabled = enabled;
+        CompactRescanButton.IsEnabled = enabled;
+        CompactRejectButton.IsEnabled = enabled;
+    }
+
+    private static string FormatReaderResult(string label, long? amount)
+    {
+        return amount is long value
+            ? $"{label}: {FormatMoney(value)} ({value.ToString(CultureInfo.InvariantCulture).Length} digits)"
+            : $"{label}: No valid result";
+    }
+
+    private static string FormatPossibleAlternatives(
+        long selectedAmount,
+        GtaResultScreenDiagnostics? diagnostics)
+    {
+        if (diagnostics is null)
+        {
+            return "Possible alternatives: None";
+        }
+
+        var alternatives = new[]
+        {
+            diagnostics.TesseractAmount,
+            diagnostics.PaddleOcrAmount,
+            diagnostics.DigitReaderAmount
+        }
+            .Where(amount => amount is not null && amount.Value != selectedAmount)
+            .Select(amount => amount!.Value)
+            .Distinct()
+            .Select(amount => FormatMoney(amount))
+            .ToList();
+        if (diagnostics.CompetingCandidates != "None")
+        {
+            alternatives.Add(diagnostics.CompetingCandidates);
+        }
+
+        return alternatives.Count == 0
+            ? $"Possible alternatives: None • Uncertain positions: {diagnostics.UncertainDigitPositions}"
+            : $"Possible alternatives: {string.Join(", ", alternatives)} • Uncertain positions: {diagnostics.UncertainDigitPositions}";
+    }
+
+    private void SetVerificationStatus(DetectedPayout candidate, GtaResultScreenDiagnostics? diagnostics)
+    {
+        var confidence = QuickCapturePolicy.NormalizeConfidence(candidate.Confidence);
+        var engineAmounts = new[]
+        {
+            diagnostics?.TesseractAmount,
+            diagnostics?.PaddleOcrAmount,
+            diagnostics?.DigitReaderAmount
+        }.Where(amount => amount is not null).Select(amount => amount!.Value).Distinct().ToArray();
+        var hasConflict = engineAmounts.Length > 1 ||
+            diagnostics is not null && diagnostics.CompetingCandidates != "None";
+        var status = engineAmounts.Length == 0
+            ? "INCOMPLETE READING"
+            : hasConflict
+                ? "CONFLICTING READERS"
+                : diagnostics?.IndependentReaderAgreement != 3
+                    ? "VERIFICATION REQUIRED"
+                    : confidence < QuickCapturePolicy.AutomaticAddConfidenceThreshold
+                        ? "LOW CONFIDENCE"
+                        : diagnostics.UncertainDigitPositions == "None"
+                            ? "STRONG AGREEMENT"
+                            : "VERIFICATION REQUIRED";
+        var strong = status == "STRONG AGREEMENT";
+        var brush = GetThemeBrush(strong ? "EarningsGreenBrush" : "WarningGoldBrush");
+        ConfirmationVerificationStatusText.Text = status;
+        ConfirmationVerificationStatusText.Foreground = brush;
+        CompactVerificationStatusText.Text = status;
+        CompactVerificationStatusText.Foreground = brush;
+        ConfirmationHeadingText.Foreground = brush;
+        CompactPendingHeadingText.Foreground = brush;
+    }
+
+    private void RecordScanAttempt(DetectedPayout candidate, int agreeingReaders)
+    {
+        _pendingScanAttempts.Add(new PendingScanAttempt(candidate.Amount, agreeingReaders, true));
+        TrimAndRenderScanAttempts();
+    }
+
+    private void RecordFailedScanAttempt()
+    {
+        _pendingScanAttempts.Add(new PendingScanAttempt(null, 0, false));
+        TrimAndRenderScanAttempts();
+    }
+
+    private void TrimAndRenderScanAttempts()
+    {
+        while (_pendingScanAttempts.Count > 3)
+        {
+            _pendingScanAttempts.RemoveAt(0);
+        }
+
+        var lines = _pendingScanAttempts.Select((attempt, index) => attempt.Recognized
+            ? $"Attempt {index + 1}: {FormatMoney(attempt.Amount!.Value)} — {attempt.AgreeingReaders}/3 readers"
+            : $"Attempt {index + 1}: No result recognized");
+        var text = "SCAN ATTEMPTS" + Environment.NewLine + string.Join(Environment.NewLine, lines);
+        ExpandedScanAttemptsText.Text = text;
+        ExpandedScanAttemptsText.Visibility = Visibility.Visible;
+        CompactScanAttemptsText.Text = text;
+        CompactScanAttemptsText.Visibility = Visibility.Visible;
+    }
+
+    private void ShowPreviousResult(DetectedPayout candidate, string message)
+    {
+        var text = $"PREVIOUS RESULT: {FormatMoney(candidate.Amount)}{Environment.NewLine}{message}";
+        ExpandedPreviousResultText.Text = text;
+        ExpandedPreviousResultBorder.Visibility = Visibility.Visible;
+        CompactPreviousResultText.Text = text;
+        CompactPreviousResultBorder.Visibility = Visibility.Visible;
+    }
+
     private async void ConfirmPayoutButton_Click(object sender, RoutedEventArgs e)
     {
         var pendingPayout = _pendingDetectedPayout;
@@ -1358,6 +1564,13 @@ public partial class MainWindow : Window
         PayoutConfirmationCard.IsEnabled = false;
         try
         {
+            if (!_duplicateGuard.CanSave(pendingPayout))
+            {
+                OcrStatusText.Text = "This visible payout was already saved. Rescan will not add it twice.";
+                DiagnosticStatusText.Text = "Scan status: Saved-earning duplicate blocked";
+                return;
+            }
+
             var source = _pendingPayoutSource;
             var screenshotPng = _pendingPayoutScreenshotPng;
             var savedRecord = await SaveEarningAmountAsync(pendingPayout.Amount, source);
@@ -1367,7 +1580,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            _duplicateGuard.RecordDismissal(pendingPayout, DateTime.UtcNow);
+            _duplicateGuard.RecordSaved(pendingPayout, DateTime.UtcNow);
             ClearPendingPayout();
             OcrStatusText.Text = "Payout confirmed and saved.";
             DiagnosticStatusText.Text = "Scan status: Candidate confirmed";
@@ -1405,6 +1618,7 @@ public partial class MainWindow : Window
         {
             CompactPendingIndicator.Visibility = Visibility.Collapsed;
             CompactEditPanel.Visibility = Visibility.Visible;
+            CompactEditPreviewImage.Source = CompactPendingPreviewImage.Source;
             CompactEditAmountTextBox.Text = text;
             CompactEditValidationText.Text = string.Empty;
             CompactEditAmountTextBox.Focus();
@@ -1443,13 +1657,24 @@ public partial class MainWindow : Window
 
         var source = $"{_pendingPayoutSource} (Edited)";
         var screenshotPng = _pendingPayoutScreenshotPng;
+        var savedCandidate = pending with
+        {
+            Amount = (long)amount,
+            NormalizedOcrText = amount.ToString(CultureInfo.InvariantCulture)
+        };
+        if (!_duplicateGuard.CanSave(savedCandidate))
+        {
+            OcrStatusText.Text = "This visible payout and amount were already saved.";
+            return;
+        }
+
         var savedRecord = await SaveEarningAmountAsync(amount, source);
         if (savedRecord is null)
         {
             return;
         }
 
-        _duplicateGuard.RecordDismissal(pending, DateTime.UtcNow);
+        _duplicateGuard.RecordSaved(savedCandidate, DateTime.UtcNow);
         ClearPendingPayout();
         OcrStatusText.Text = "Edited payout saved.";
         ShowCompactScanMessage($"Added {FormatMoney(amount)}");
@@ -1488,7 +1713,13 @@ public partial class MainWindow : Window
         PayoutConfirmationCard.Visibility = Visibility.Collapsed;
         CompactPendingIndicator.Visibility = Visibility.Collapsed;
         CompactEditPanel.Visibility = Visibility.Collapsed;
+        CompactEditPreviewImage.Source = null;
         ExpandedEditPanel.Visibility = Visibility.Collapsed;
+        ExpandedPreviousResultBorder.Visibility = Visibility.Collapsed;
+        CompactPreviousResultBorder.Visibility = Visibility.Collapsed;
+        ExpandedScanAttemptsText.Visibility = Visibility.Collapsed;
+        CompactScanAttemptsText.Visibility = Visibility.Collapsed;
+        _pendingScanAttempts.Clear();
         CompactNormalPanel.Visibility = Visibility.Visible;
         if (_isCompactMode)
         {
@@ -2077,6 +2308,8 @@ public partial class MainWindow : Window
             ContinueScannerWhileHiddenCheckBox.IsChecked = _captureSettings.ContinueScannerWhileHidden;
             ShowTrayNotificationCheckBox.IsChecked = _captureSettings.ShowTrayNotificationAfterPayout;
             ShowScannerPerformanceDiagnosticsCheckBox.IsChecked = _captureSettings.ShowScannerPerformanceDiagnostics;
+            PaddleOcrEnabledCheckBox.IsChecked = _captureSettings.PaddleOcrEnabled;
+            UpdatePaddleOcrStatus();
             ScannerDetectionModeComboBox.SelectedIndex = (int)_captureSettings.DetectionMode;
             ScannerAreaModeComboBox.SelectedIndex = (int)ScannerAreaMode.SelectedRegion;
             RequireQuickConfirmationCheckBox.IsChecked = true;
@@ -2397,6 +2630,67 @@ public partial class MainWindow : Window
         _captureSettings.RequireQuickCaptureConfirmation = true;
         Topmost = _captureSettings.AlwaysOnTop;
         await SaveSettingsQuietlyAsync();
+    }
+
+    private async void PaddleOcrEnabledCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressSettingsUiEvents)
+        {
+            return;
+        }
+
+        _captureSettings.PaddleOcrEnabled = PaddleOcrEnabledCheckBox.IsChecked == true;
+        _paddleOcrService.Enabled = _captureSettings.PaddleOcrEnabled;
+        PaddleOcrModelStatusText.Text = _paddleOcrService.Enabled
+            ? "AI model status: Loading local model…"
+            : "AI model status: Disabled";
+        await SaveSettingsQuietlyAsync();
+        await InitializePaddleOcrStatusAsync();
+    }
+
+    private async Task InitializePaddleOcrStatusAsync()
+    {
+        try
+        {
+            var available = false;
+            if (_paddleOcrService.Enabled)
+            {
+                available = await Task.Run(
+                    () => _paddleOcrService.IsAvailable,
+                    _shutdownCancellation.Token);
+            }
+
+            if (!_isClosing)
+            {
+                UpdatePaddleOcrStatus();
+                if (_paddleOcrService.Enabled && !available)
+                {
+                    OcrStatusText.Text = PaddleOcrRecognitionService.UnavailableMessage;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_shutdownCancellation.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void UpdatePaddleOcrStatus()
+    {
+        if (!_paddleOcrService.Enabled)
+        {
+            PaddleOcrModelStatusText.Text = "AI model status: Disabled";
+        }
+        else if (_paddleOcrService.ModelLoadDuration is null)
+        {
+            PaddleOcrModelStatusText.Text = "AI model status: Loading local model…";
+        }
+        else
+        {
+            PaddleOcrModelStatusText.Text = $"AI model status: {_paddleOcrService.ModelStatus}";
+        }
+
+        PaddleOcrLoadTimeText.Text = $"AI model load time: {(_paddleOcrService.ModelLoadDuration is TimeSpan load ? $"{load.TotalMilliseconds:0} ms" : "--")}";
+        PaddleOcrLatestTimeText.Text = $"Latest PaddleOCR processing time: {(_paddleOcrService.LatestProcessingDuration is TimeSpan latest ? $"{latest.TotalMilliseconds:0.0} ms" : "--")}";
     }
 
     private async void ThemeComboBox_SelectionChanged(

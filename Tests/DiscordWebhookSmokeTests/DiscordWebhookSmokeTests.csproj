@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\GTAEarningsTracker.csproj" />
+    <ProjectReference Include="..\..\src\HeistLedger\GTAEarningsTracker.csproj" />
   </ItemGroup>
 </Project>

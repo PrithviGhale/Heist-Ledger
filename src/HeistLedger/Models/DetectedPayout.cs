@@ -62,7 +62,13 @@ public sealed record GtaResultScreenDiagnostics(
     IReadOnlyList<GtaDigitOcrDiagnostic>? DigitOcrResults = null,
     int StableFrameCount = 1,
     int IndependentReaderAgreement = 0,
-    string UncertainDigitPositions = "None");
+    string UncertainDigitPositions = "None",
+    long? TesseractAmount = null,
+    long? PaddleOcrAmount = null,
+    long? DigitReaderAmount = null,
+    string PaddleOcrStatus = "Not run",
+    double? PaddleOcrProcessingMilliseconds = null,
+    bool ForcedRescan = false);
 
 public sealed record ScannerPerformanceDiagnostics(
     string CaptureBackend,

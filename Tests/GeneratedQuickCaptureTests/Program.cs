@@ -389,9 +389,16 @@ internal static class Program
             (FileName: "UserTest2.png", Expected: 1_413_716L),
             (FileName: "UserTest3.png", Expected: 968_000L),
             (FileName: "UserTest4.png", Expected: 2_538_000L),
-            (FileName: "UserTest5.png", Expected: 3_615_920L)
+            (FileName: "UserTest5.png", Expected: 3_615_920L),
+            (FileName: "UserTest8.png", Expected: 1_188_830L),
+            (FileName: "UserTest9.png", Expected: 864_000L),
+            (FileName: "UserTest10.png", Expected: 13_875_000L),
+            (FileName: "UserTest11.png", Expected: 3_485_830L),
+            (FileName: "UserTest12.png", Expected: 2_491_190L),
+            (FileName: "UserTest13.png", Expected: 2_540_540L)
         };
-        var reader = new GtaLargeDigitReaderService(detection, amountOcrService);
+        using var paddleOcr = new PaddleOcrRecognitionService();
+        var reader = new GtaLargeDigitReaderService(detection, amountOcrService, paddleOcr);
         foreach (var testCase in cases.Where(testCase =>
                      string.IsNullOrWhiteSpace(requestedUserImage) ||
                      testCase.FileName.Contains(requestedUserImage, StringComparison.OrdinalIgnoreCase)))
@@ -481,12 +488,31 @@ internal static class Program
         var firstPresentation = duplicateGuard.ShouldPresent(duplicateCandidate, now);
         duplicateGuard.RecordDismissal(duplicateCandidate, now);
         var immediateRepeat = duplicateGuard.ShouldPresent(duplicateCandidate, now.AddSeconds(1));
+        var forcedRepeat = duplicateGuard.ShouldPresent(
+            duplicateCandidate,
+            now.AddSeconds(1),
+            ScanRequestMode.ForcedRescan);
         duplicateGuard.RecordNoCandidate("missing-1");
         duplicateGuard.RecordNoCandidate("missing-2");
         var laterPresentation = duplicateGuard.ShouldPresent(duplicateCandidate, now.AddSeconds(5));
-        if (!firstPresentation || immediateRepeat || !laterPresentation)
+        if (!firstPresentation || !immediateRepeat || !forcedRepeat || !laterPresentation)
         {
-            failures.Add("duplicate lifecycle");
+            failures.Add("repeat scans are always presented");
+        }
+
+        if (!duplicateGuard.CanSave(duplicateCandidate))
+        {
+            failures.Add("fresh candidate save eligibility");
+        }
+
+        duplicateGuard.RecordSaved(duplicateCandidate, now.AddSeconds(6));
+        var forcedAfterSave = duplicateGuard.ShouldPresent(
+            duplicateCandidate,
+            now.AddSeconds(7),
+            ScanRequestMode.ForcedRescan);
+        if (!forcedAfterSave || !duplicateGuard.CanSave(duplicateCandidate))
+        {
+            failures.Add("saved payouts can be scanned and saved again");
         }
     }
 
@@ -558,6 +584,15 @@ internal static class Program
         {
             failures.Add("selected-region-only capture bounds");
         }
+
+        var synthetic = RenderResultImage(["TOTAL CASH EARNED", "$2,538,000"]);
+        var amountBounds = OptimizedGtaResultScreenDetectionService.CreateAmountBounds(
+            synthetic,
+            new Int32Rect(40, 45, 620, 40));
+        if (amountBounds.Y + amountBounds.Height > synthetic.PixelHeight - synthetic.PixelHeight / 30)
+        {
+            failures.Add("amount crop excludes bottom desktop/taskbar strip");
+        }
     }
 
     private static void RunConsensusTests(ICollection<string> failures)
@@ -598,6 +633,26 @@ internal static class Program
         if (!missingDigit.HasDigitCountConflict || missingDigit.MeetsExactAgreementPolicy)
         {
             failures.Add("segmented digit count conflict");
+        }
+
+        var oneOfThree = GtaLargeDigitReaderService.EvaluateEngineConsensus(
+            538_000, null, null, 3, 0, false, false);
+        var twoOfThree = GtaLargeDigitReaderService.EvaluateEngineConsensus(
+            2_538_000, null, 2_538_000, 3, 0, false, false);
+        var allThree = GtaLargeDigitReaderService.EvaluateEngineConsensus(
+            2_538_000, 2_538_000, 2_538_000, 3, 1, false, false);
+        if (oneOfThree.EligibleForAutomaticAdd ||
+            twoOfThree.EligibleForAutomaticAdd ||
+            !allThree.EligibleForAutomaticAdd)
+        {
+            failures.Add("strict three-engine automatic-add policy");
+        }
+
+        if (PaddleOcrRecognitionService.NormalizeDigits("G253a000lb").Length != 0 ||
+            PaddleOcrRecognitionService.NormalizeDigits("$2,538,000") != "2538000" ||
+            PaddleOcrRecognitionService.NormalizeDigits("a2491190") != "2491190")
+        {
+            failures.Add("invalid PaddleOCR output rejection");
         }
     }
 
@@ -644,6 +699,21 @@ internal static class Program
             compactWidth < 400)
         {
             failures.Add("compact layout reserves visible scan and confirmation space");
+        }
+
+        foreach (var controlName in new[]
+                 {
+                     "CompactAcceptButton", "CompactEditButton", "CompactRescanButton", "CompactRejectButton",
+                     "CompactEditPreviewImage",
+                     "ExpandedAcceptButton", "ExpandedEditButton", "ExpandedRescanButton", "ExpandedRejectButton"
+                 })
+        {
+            if (windowConstants.GetField(
+                    controlName,
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic) is null)
+            {
+                failures.Add($"pending-result control {controlName}");
+            }
         }
     }
 

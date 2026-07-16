@@ -16,12 +16,20 @@ public partial class CaptureSelectionWindow : Window
     private const int MinimumPayoutAreaHeight = 100;
 
     private readonly ScreenCaptureService _screenCaptureService;
+    private readonly Grid _selectionSurface;
+    private readonly Border _selectionBorder;
+    private readonly TextBlock _selectionStatusText;
     private Point _selectionStart;
     private bool _isSelecting;
 
     public CaptureSelectionWindow(ScreenCaptureService screenCaptureService)
     {
-        InitializeComponent();
+        System.Windows.Application.LoadComponent(
+            this,
+            new Uri("/HeistLedger;component/CaptureSelectionWindow.xaml", UriKind.Relative));
+        _selectionSurface = GetRequiredElement<Grid>("SelectionSurface");
+        _selectionBorder = GetRequiredElement<Border>("SelectionBorder");
+        _selectionStatusText = GetRequiredElement<TextBlock>("SelectionStatusText");
         _screenCaptureService = screenCaptureService;
     }
 
@@ -50,10 +58,10 @@ public partial class CaptureSelectionWindow : Window
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        _selectionStart = ClampToSelectionSurface(e.GetPosition(SelectionSurface));
+        _selectionStart = ClampToSelectionSurface(e.GetPosition(_selectionSurface));
         _isSelecting = true;
-        SelectionStatusText.Text = string.Empty;
-        SelectionBorder.Visibility = Visibility.Visible;
+        _selectionStatusText.Text = string.Empty;
+        _selectionBorder.Visibility = Visibility.Visible;
         UpdateSelectionBorder(_selectionStart);
         Mouse.Capture(this);
         e.Handled = true;
@@ -66,7 +74,7 @@ public partial class CaptureSelectionWindow : Window
             return;
         }
 
-        UpdateSelectionBorder(ClampToSelectionSurface(e.GetPosition(SelectionSurface)));
+        UpdateSelectionBorder(ClampToSelectionSurface(e.GetPosition(_selectionSurface)));
     }
 
     private void Window_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -76,7 +84,7 @@ public partial class CaptureSelectionWindow : Window
             return;
         }
 
-        var selectionEnd = ClampToSelectionSurface(e.GetPosition(SelectionSurface));
+        var selectionEnd = ClampToSelectionSurface(e.GetPosition(_selectionSurface));
         _isSelecting = false;
         Mouse.Capture(null);
         UpdateSelectionBorder(selectionEnd);
@@ -100,7 +108,7 @@ public partial class CaptureSelectionWindow : Window
             selectedArea.Width < MinimumPayoutAreaWidth ||
             selectedArea.Height < MinimumPayoutAreaHeight)
         {
-            SelectionStatusText.Text =
+            _selectionStatusText.Text =
                 "Include both text lines with padding. The area must be at least 300 by 100 pixels.";
             return;
         }
@@ -129,8 +137,8 @@ public partial class CaptureSelectionWindow : Window
     private Point ClampToSelectionSurface(Point point)
     {
         return new Point(
-            Math.Clamp(point.X, 0, SelectionSurface.ActualWidth),
-            Math.Clamp(point.Y, 0, SelectionSurface.ActualHeight));
+            Math.Clamp(point.X, 0, _selectionSurface.ActualWidth),
+            Math.Clamp(point.Y, 0, _selectionSurface.ActualHeight));
     }
 
     private void UpdateSelectionBorder(Point currentPoint)
@@ -140,9 +148,15 @@ public partial class CaptureSelectionWindow : Window
         var width = Math.Abs(currentPoint.X - _selectionStart.X);
         var height = Math.Abs(currentPoint.Y - _selectionStart.Y);
 
-        Canvas.SetLeft(SelectionBorder, left);
-        Canvas.SetTop(SelectionBorder, top);
-        SelectionBorder.Width = width;
-        SelectionBorder.Height = height;
+        Canvas.SetLeft(_selectionBorder, left);
+        Canvas.SetTop(_selectionBorder, top);
+        _selectionBorder.Width = width;
+        _selectionBorder.Height = height;
+    }
+
+    private T GetRequiredElement<T>(string name) where T : FrameworkElement
+    {
+        return FindName(name) as T ??
+            throw new InvalidOperationException($"The required XAML element '{name}' was not found.");
     }
 }

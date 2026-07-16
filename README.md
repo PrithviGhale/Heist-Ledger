@@ -1,34 +1,50 @@
 # Heist Ledger
 
-Heist Ledger is a passive, standalone Windows companion for tracking GTA Online earnings. It tracks manually confirmed earnings and analyzes only the visible pixels selected by the user. It does not access the GTA process, automate input, modify game files, or interact with anti-cheat software.
+Heist Ledger is a standalone Windows companion for tracking GTA Online earnings. It supports manual entries and user-triggered Quick Scan OCR while reading only the visible screen region selected by the user. It does not access the GTA process, automate input, modify game files, or interact with anti-cheat software.
 
 ## Download
 
-Download the latest Windows release from the [GitHub Releases page](https://github.com/PrithviGhale/Heist-Ledger/releases/latest). Extract the ZIP to a normal folder and run `GTAEarningsTracker.exe`.
+Download the latest Windows build from the [GitHub Releases page](https://github.com/PrithviGhale/Heist-Ledger/releases/latest). Extract the ZIP and run `HeistLedger.exe`.
 
-The Windows x64 release is self-contained, so the .NET runtime does not need to be installed separately. OCR also depends on the Microsoft Visual C++ 2015–2022 x64 Redistributable.
+The Windows x64 package is self-contained, so users do not need to install .NET separately. OCR requires the Microsoft Visual C++ 2015–2022 x64 Redistributable. Version 1.1.0 is not Authenticode-signed, so Windows SmartScreen may identify it as an unrecognized app; the release includes a SHA-256 checksum for verification.
 
-Each Windows user gets independent earnings and settings under `%LocalAppData%\GTAEarningsTracker`. Updating or replacing the application folder does not remove that local data.
+User earnings and settings are stored under `%LocalAppData%\GTAEarningsTracker`. Updating the application does not remove that data.
 
 ## Features
 
 - Manual payout entry with rolling 24-hour and 7-day totals
 - User-selected visible screen region for passive Quick Scan OCR
-- Manual confirmation, editing, rejection, undo, and duplicate protection
+- Three-reader OCR verification using Tesseract, local PaddleOCR AI, and a GTA-specific digit reader
+- Rockstar-font preprocessing and segmented digit recovery for difficult payout overlays
+- Five-frame rescanning with reader agreement, alternatives, and uncertainty details
+- Accept, edit, rescan, and reject workflow before saving uncertain results
+- Captured payout preview while manually editing an amount
+- Repeated rescanning and saving of the same visible payout without duplicate suppression
 - Compact always-on-top overlay and six visual themes
 - Optional Discord webhook notifications with an in-memory payout preview
 - Local JSON storage with no game-process or anti-cheat interaction
 
-## OCR runtime requirements
+## OCR and privacy
 
-Stage 3 uses the `Tesseract` 5.2.0 .NET wrapper and the English `tessdata_fast` model in `tessdata/eng.traineddata`. The model is copied beside the application during build and is resolved from `AppContext.BaseDirectory`; no machine-specific path is required.
+OCR runs locally. The app combines the Tesseract 5.2.0 wrapper, the English `tessdata_fast` model, the PP-OCRv5 mobile recognition model through ONNX Runtime, and a specialized GTA digit reader. Captured images and preprocessing variants remain in memory and are not saved by the application.
 
-The Tesseract and Leptonica native binaries in this wrapper were built with Visual Studio 2019. Windows systems running the OCR feature therefore need the Microsoft Visual C++ 2015–2022 Redistributable installed for the application's architecture. Both the x64 and x86 redistributables may be installed on 64-bit Windows.
-
-OCR processing is local. Captured images and preprocessing variants remain in memory and are not saved by the application. If the user explicitly enables the Discord webhook option and screenshot sharing, the in-memory payout crop from a confirmed Quick Scan is uploaded with that Discord message.
+If Discord screenshot sharing is explicitly enabled, the in-memory crop from a confirmed Quick Scan is uploaded with that Discord message. Discord integration is disabled by default.
 
 ## Optional Discord webhook
 
-Open **Settings > Discord Webhook**, enter the display username that should appear beside payouts, and paste a Discord incoming webhook URL. Use **Send Test** to verify the connection, then enable **Send confirmed Quick Scan payouts** and save.
+Open **Settings > Discord Webhook**, enter the display username, and paste a Discord incoming webhook URL. Use **Send Test**, then enable **Send confirmed Quick Scan payouts** and save. The URL is protected with Windows Data Protection for the current Windows user.
 
-Discord messages are sent only after a Quick Scan payout is manually confirmed and saved locally. They include the confirmed amount, rolling 24-hour and 7-day totals, the Quick Scan method, and local time. Screenshot attachment sharing can be disabled independently. The webhook URL is protected with Windows Data Protection for the current Windows user and stored in `%LocalAppData%\GTAEarningsTracker\discord-settings.json`.
+## Repository layout
+
+```text
+src/HeistLedger/   WPF application, OCR models, themes, and runtime assets
+Tests/             Regression projects and screenshot fixtures
+scripts/           Maintenance scripts
+docs/              Release notes and build documentation
+```
+
+Build and test instructions are in [docs/BUILDING.md](docs/BUILDING.md). Release history is available under [docs](docs).
+
+## Safety
+
+Heist Ledger does not read game memory, inspect GTA processes, inject DLLs, hook DirectX, modify game files, automate input, or interact with BattlEye. Quick Scan analyzes only visible pixels inside the region selected by the user.

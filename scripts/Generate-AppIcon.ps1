@@ -1,9 +1,9 @@
 param(
     [Parameter(Mandatory = $false)]
-    [string]$SourcePath = "Assets\AppIcon.png",
+    [string]$SourcePath = "src\HeistLedger\Assets\AppIcon.png",
 
     [Parameter(Mandatory = $false)]
-    [string]$OutputPath = "Assets\AppIcon.ico"
+    [string]$OutputPath = "src\HeistLedger\Assets\AppIcon.ico"
 )
 
 Set-StrictMode -Version Latest

@@ -31,6 +31,17 @@ public sealed class FastGtaPreprocessingService
         return Encode("Fallback low-saturation text 0.55x", data.Width, data.Height, CreateLegacyTextMask(data, invert: false), 0.55);
     }
 
+    public PreprocessedImage CreateRockstarOverlayVariant(BitmapSource source)
+    {
+        var data = Prepare(source);
+        return Encode(
+            "Rockstar translucent digit mask 0.55x",
+            data.Width,
+            data.Height,
+            CreateRockstarOverlayMask(data),
+            0.55);
+    }
+
     public PreprocessedImage CreateClosedTextVariant(BitmapSource source)
     {
         var data = Prepare(source);
@@ -246,6 +257,21 @@ public sealed class FastGtaPreprocessingService
             var isText = data.Luminance[index] >= 100 && data.Saturation[index] <= 118;
             var value = isText ^ invert ? (byte)255 : (byte)0;
             SetGray(output, index * 4, value);
+        }
+
+        return output;
+    }
+
+    private static byte[] CreateRockstarOverlayMask(ImageData data)
+    {
+        var output = new byte[data.Pixels.Length];
+        for (var index = 0; index < data.Luminance.Length; index++)
+        {
+            // GTA's payout glyph is a translucent near-white overlay. A lower
+            // luminance floor retains the complete block shape over dark scenery;
+            // the tighter saturation ceiling removes the green game world.
+            var isText = data.Luminance[index] >= 90 && data.Saturation[index] <= 105;
+            SetGray(output, index * 4, isText ? (byte)255 : (byte)0);
         }
 
         return output;
