@@ -18,6 +18,7 @@ dotnet build src\HeistLedger\GTAEarningsTracker.csproj -c Release --no-restore
 ```powershell
 dotnet run --project Tests\GeneratedQuickCaptureTests\GeneratedQuickCaptureTests.csproj -c Release
 dotnet run --project Tests\PaddleOcrRegressionTests\PaddleOcrRegressionTests.csproj -c Release
+dotnet run --project Tests\EarningsSessionTests\EarningsSessionTests.csproj -c Release
 dotnet run --project Tests\DiscordWebhookSmokeTests\DiscordWebhookSmokeTests.csproj -c Release
 ```
 

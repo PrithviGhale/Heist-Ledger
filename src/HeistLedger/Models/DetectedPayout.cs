@@ -7,7 +7,8 @@ public enum PayoutDetectionMethod
 {
     PlusSignPayout,
     TotalCashEarned,
-    GtaTotalCashEarnedResultScreen
+    GtaTotalCashEarnedResultScreen,
+    GreenCashIconPayout
 }
 
 public sealed record DetectedPayout(

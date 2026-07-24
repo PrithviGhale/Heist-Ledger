@@ -23,5 +23,12 @@
     <None Include="..\Fixtures\Screenshot 2026-07-15 202447.png" Link="TestSamples\UserTest11.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Fixtures\Screenshot 2026-07-15 202518.png" Link="TestSamples\UserTest12.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Fixtures\Screenshot 2026-07-15 202555.png" Link="TestSamples\UserTest13.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fixtures\Screenshot 2026-07-24 122522.png" Link="GreenCashSamples\GreenCash1646400.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fixtures\Screenshot 2026-07-24 122533.png" Link="GreenCashSamples\GreenCash1100000.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fixtures\Screenshot 2026-07-24 122551.png" Link="GreenCashSamples\GreenCash5586000.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fixtures\Screenshot 2026-07-24 124226.png" Link="GreenCashSamples\GreenCash1293600.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fixtures\image.png" Link="GreenCashSamples\GreenCash500000.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fixtures\vVGM5YB.png" Link="GreenCashSamples\GreenCash2000000.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fixtures\Qb8q7kK.png" Link="GreenCashSamples\GreenCash2500000.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

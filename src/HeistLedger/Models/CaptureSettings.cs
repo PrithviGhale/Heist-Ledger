@@ -37,6 +37,14 @@ public sealed class CaptureSettings
 
     public string HotkeyDisplayText { get; set; } = "Ctrl + Shift + H";
 
+    public bool MinimizeHotkeyEnabled { get; set; } = true;
+
+    public int MinimizeHotkeyModifiers { get; set; } = 0x0002 | 0x0004;
+
+    public int MinimizeHotkeyVirtualKey { get; set; } = 0x4D;
+
+    public string MinimizeHotkeyDisplayText { get; set; } = "Ctrl + Shift + M";
+
     public bool AlwaysOnTop { get; set; } = true;
 
     public bool RememberWindowPosition { get; set; } = true;

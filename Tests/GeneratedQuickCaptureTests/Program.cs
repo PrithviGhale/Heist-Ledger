@@ -23,6 +23,7 @@ internal static class Program
         var generatedOnly = args.Contains("--generated-only", StringComparer.OrdinalIgnoreCase);
         var referenceOnly = args.Contains("--reference-only", StringComparer.OrdinalIgnoreCase);
         var userImagesOnly = args.Contains("--user-images-only", StringComparer.OrdinalIgnoreCase);
+        var greenImagesOnly = args.Contains("--green-images-only", StringComparer.OrdinalIgnoreCase);
         var requestedUserImage = args.FirstOrDefault(argument =>
             argument.StartsWith("--user-image=", StringComparison.OrdinalIgnoreCase))?[13..];
         var requestedCase = args.FirstOrDefault(argument => argument.StartsWith("--case=", StringComparison.OrdinalIgnoreCase))?[7..];
@@ -57,7 +58,11 @@ internal static class Program
             amountOcrService);
         var failures = new List<string>();
 
-        if (userImagesOnly)
+        if (greenImagesOnly)
+        {
+            RunGreenCashFixtureTests(amountOcrService, failures);
+        }
+        else if (userImagesOnly)
         {
             RunUserPngRegressions(detection, amountOcrService, failures, requestedUserImage);
         }
@@ -70,6 +75,7 @@ internal static class Program
         }
 
         foreach (var testCase in cases.Where(testCase =>
+                     !greenImagesOnly &&
                      !userImagesOnly &&
                      !referenceOnly &&
                      (string.IsNullOrWhiteSpace(requestedCase) ||
@@ -126,9 +132,10 @@ internal static class Program
             }
         }
 
-        if (!userImagesOnly)
+        if (!userImagesOnly && !greenImagesOnly)
         {
             RunNormalizationTests(failures);
+            RunGreenCashIconTests(amountOcrService, failures);
             RunPolicyAndDuplicateTests(failures);
             RunFrameChangeTests(failures);
             RunSettingsCompatibilityTest(failures);
@@ -425,7 +432,20 @@ internal static class Program
                 $"anchor={diagnostics?.AnchorFound}; readers={diagnostics?.IndependentReaderAgreement}; " +
                 $"competitors={diagnostics?.CompetingCandidates}; passes={diagnostics?.Performance?.PreprocessingVariantsAttempted}; " +
                 $"duration={diagnostics?.Performance?.TotalScanMilliseconds:0.0} ms");
-            if (result.Analysis.Candidate?.Amount != testCase.Expected)
+            var amountIsBelowHeading = diagnostics?.AnchorBounds is Int32Rect headingBounds &&
+                diagnostics.AmountCropBounds.Y >= headingBounds.Y + headingBounds.Height;
+            var completeSpecializedResult =
+                result.Analysis.Candidate?.Amount == testCase.Expected &&
+                result.Analysis.Candidate.DetectionMethod == PayoutDetectionMethod.GtaTotalCashEarnedResultScreen &&
+                diagnostics is
+                {
+                    AnchorFound: true,
+                    AmountCropPreview: not null,
+                    SelectedAmount: not null
+                } &&
+                diagnostics.SelectedAmount == testCase.Expected &&
+                amountIsBelowHeading;
+            if (!completeSpecializedResult)
             {
                 failures.Add($"{testCase.FileName} payout regression");
                 var fullFallback = detection.Analyze(image, CancellationToken.None);
@@ -790,6 +810,156 @@ internal static class Program
                 drawing.DrawText(text, new Point(42, y));
                 y += isHeading ? 105 : lines.Count > 2 ? 108 : 170;
             }
+        }
+
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    private static void RunGreenCashIconTests(
+        OcrService amountOcrService,
+        ICollection<string> failures)
+    {
+        var detector = new GreenCashPayoutDetectionService(amountOcrService);
+        var cases = new[]
+        {
+            (Name: "green cash pale 55.86m", Amount: 55_860_000L, Icon: Color.FromRgb(142, 201, 145), Text: Colors.White, Background: Color.FromRgb(29, 43, 43)),
+            (Name: "green cash standard 11m", Amount: 11_000_000L, Icon: Color.FromRgb(74, 180, 80), Text: Colors.White, Background: Colors.Black),
+            (Name: "green cash overlay 1.6464m", Amount: 1_646_400L, Icon: Color.FromRgb(103, 163, 96), Text: Color.FromRgb(76, 245, 188), Background: Color.FromRgb(12, 54, 45))
+        };
+
+        foreach (var testCase in cases)
+        {
+            var image = RenderGreenCashImage(testCase.Amount, testCase.Icon, testCase.Text, testCase.Background);
+            var frames = Enumerable.Repeat<BitmapSource>(image, 5).ToArray();
+            var analysis = detector.Analyze(frames, CancellationToken.None);
+            Console.WriteLine(
+                $"{testCase.Name}: amount={analysis?.Candidate?.Amount.ToString(CultureInfo.InvariantCulture) ?? "none"}, " +
+                $"method={analysis?.Candidate?.DetectionMethod.ToString() ?? "none"}, " +
+                $"confidence={analysis?.Candidate?.Confidence.ToString("P0", CultureInfo.InvariantCulture) ?? "--"}");
+            if (analysis?.Candidate?.Amount != testCase.Amount ||
+                analysis.Candidate.DetectionMethod != PayoutDetectionMethod.GreenCashIconPayout ||
+                analysis.Candidate.AutomaticAddRecommended != false ||
+                QuickCapturePolicy.Evaluate(analysis.Candidate, requireManualConfirmation: false) != QuickCaptureDecision.RequireConfirmation ||
+                analysis.GtaResultDiagnostics?.AmountCropPreview is null)
+            {
+                failures.Add(testCase.Name);
+            }
+        }
+
+        var noIcon = RenderResultImage(["+$5,000,000"]);
+        if (detector.Analyze(Enumerable.Repeat<BitmapSource>(noIcon, 5).ToArray(), CancellationToken.None) is not null)
+        {
+            failures.Add("green cash detector requires icon");
+        }
+
+        if (!GreenCashPayoutDetectionService.TryParsePositiveAmount("+$1,646,400", out _, out var parsed) ||
+            parsed != 1_646_400 ||
+            GreenCashPayoutDetectionService.TryParsePositiveAmount("-$500,000", out _, out _))
+        {
+            failures.Add("green cash signed amount validation");
+        }
+    }
+
+    private static void RunGreenCashFixtureTests(
+        OcrService amountOcrService,
+        ICollection<string> failures)
+    {
+        var detector = new GreenCashPayoutDetectionService(amountOcrService);
+        var cases = new[]
+        {
+            (File: "GreenCash1646400.png", Expected: 1_646_400L),
+            (File: "GreenCash1100000.png", Expected: 1_100_000L),
+            (File: "GreenCash5586000.png", Expected: 5_586_000L),
+            (File: "GreenCash1293600.png", Expected: 1_293_600L),
+            (File: "GreenCash500000.png", Expected: 500_000L),
+            (File: "GreenCash2000000.png", Expected: 2_000_000L),
+            (File: "GreenCash2500000.png", Expected: 2_500_000L)
+        };
+
+        foreach (var testCase in cases)
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "GreenCashSamples", testCase.File);
+            if (!File.Exists(path))
+            {
+                Console.Error.WriteLine($"Missing green cash fixture: {path}");
+                failures.Add($"missing {testCase.File}");
+                continue;
+            }
+
+            var image = LoadImage(path);
+            var frames = Enumerable.Repeat<BitmapSource>(image, 5).ToArray();
+            var analysis = detector.Analyze(frames, CancellationToken.None);
+            var actual = analysis?.Candidate?.Amount;
+            Console.WriteLine(
+                $"{testCase.File}: expected={testCase.Expected.ToString(CultureInfo.InvariantCulture)}; " +
+                $"actual={actual?.ToString(CultureInfo.InvariantCulture) ?? "none"}; " +
+                $"icon={analysis?.GtaResultDiagnostics?.AnchorFound == true}; " +
+                $"readers={analysis?.GtaResultDiagnostics?.AgreeingVariantCount.ToString(CultureInfo.InvariantCulture) ?? "0"}; " +
+                $"confidence={analysis?.Candidate?.Confidence.ToString("P0", CultureInfo.InvariantCulture) ?? "--"}");
+            if (actual != testCase.Expected ||
+                analysis?.Candidate?.DetectionMethod != PayoutDetectionMethod.GreenCashIconPayout ||
+                QuickCapturePolicy.Evaluate(analysis.Candidate, false) != QuickCaptureDecision.RequireConfirmation)
+            {
+                failures.Add($"green fixture {testCase.File}");
+                if (analysis?.GtaResultDiagnostics is { } diagnostics)
+                {
+                    foreach (var result in diagnostics.AmountOcrResults)
+                    {
+                        Console.WriteLine(
+                            $"  {result.PreprocessingMethod}: raw={OneLine(result.RawText)}; " +
+                            $"amount={result.ParsedAmount?.ToString(CultureInfo.InvariantCulture) ?? "none"}; " +
+                            $"confidence={result.Confidence:P0}; symbols={result.SymbolSummary}");
+                    }
+                }
+            }
+        }
+    }
+
+    private static BitmapSource RenderGreenCashImage(
+        long amount,
+        Color iconColor,
+        Color textColor,
+        Color backgroundColor)
+    {
+        const int width = 1500;
+        const int height = 420;
+        const double diameter = 350;
+        var visual = new DrawingVisual();
+        using (var drawing = visual.RenderOpen())
+        {
+            drawing.DrawRectangle(new SolidColorBrush(backgroundColor), null, new Rect(0, 0, width, height));
+            drawing.DrawEllipse(
+                new SolidColorBrush(iconColor),
+                null,
+                new Point(215, 210),
+                diameter / 2,
+                diameter / 2);
+            var typeface = new Typeface(
+                new FontFamily("Arial Narrow"),
+                FontStyles.Normal,
+                FontWeights.Bold,
+                FontStretches.Condensed);
+            var dollar = new FormattedText(
+                "$",
+                CultureInfo.GetCultureInfo("en-US"),
+                FlowDirection.LeftToRight,
+                typeface,
+                265,
+                Brushes.White,
+                1.0);
+            drawing.DrawText(dollar, new Point(215 - (dollar.Width / 2), 210 - (dollar.Height / 2)));
+            var payout = new FormattedText(
+                $"+${amount.ToString(CultureInfo.InvariantCulture)}",
+                CultureInfo.GetCultureInfo("en-US"),
+                FlowDirection.LeftToRight,
+                typeface,
+                185,
+                new SolidColorBrush(textColor),
+                1.0);
+            drawing.DrawText(payout, new Point(405, 210 - (payout.Height / 2)));
         }
 
         var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);

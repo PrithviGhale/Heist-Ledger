@@ -23,7 +23,8 @@ public static class QuickCapturePolicy
         if (candidate is null ||
             candidate.DetectionMethod is not (
                 PayoutDetectionMethod.TotalCashEarned or
-                PayoutDetectionMethod.GtaTotalCashEarnedResultScreen) ||
+                PayoutDetectionMethod.GtaTotalCashEarnedResultScreen or
+                PayoutDetectionMethod.GreenCashIconPayout) ||
             candidate.Amount <= 0 ||
             candidate.Amount > PayoutDetectionService.MaximumPayout)
         {

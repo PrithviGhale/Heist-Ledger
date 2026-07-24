@@ -43,6 +43,79 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
+            <Border x:Name="AmbientGlowOne"
+                     Grid.RowSpan="3"
+                     Width="460"
+                     Height="130"
+                     Margin="-170,90,0,0"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Top"
+                     IsHitTestVisible="False"
+                     Opacity="0.11"
+                     CornerRadius="48"
+                     RenderTransformOrigin="0.5,0.5">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                        <GradientStop Color="Transparent" Offset="0" />
+                        <GradientStop Color="{DynamicResource EarningsGreenColor}" Offset="0.52" />
+                        <GradientStop Color="Transparent" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <RotateTransform Angle="-18" />
+                        <TranslateTransform x:Name="AmbientGlowOneTransform" />
+                    </TransformGroup>
+                </Border.RenderTransform>
+            </Border>
+            <Border x:Name="AmbientGlowTwo"
+                     Grid.RowSpan="3"
+                     Width="430"
+                     Height="110"
+                     Margin="0,0,-165,145"
+                     HorizontalAlignment="Right"
+                     VerticalAlignment="Bottom"
+                     IsHitTestVisible="False"
+                     Opacity="0.075"
+                     CornerRadius="42"
+                     RenderTransformOrigin="0.5,0.5">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                        <GradientStop Color="Transparent" Offset="0" />
+                        <GradientStop Color="{DynamicResource ScannerCyanColor}" Offset="0.55" />
+                        <GradientStop Color="Transparent" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <RotateTransform Angle="15" />
+                        <TranslateTransform x:Name="AmbientGlowTwoTransform" />
+                    </TransformGroup>
+                </Border.RenderTransform>
+            </Border>
+            <Border Grid.RowSpan="3" IsHitTestVisible="False" Opacity="0.055">
+                <Border.Background>
+                    <DrawingBrush TileMode="Tile" Viewport="0,0,32,32" ViewportUnits="Absolute">
+                        <DrawingBrush.Drawing>
+                            <GeometryDrawing Brush="Transparent">
+                                <GeometryDrawing.Pen>
+                                    <Pen Brush="{DynamicResource PrimaryTextBrush}" Thickness="0.6" />
+                                </GeometryDrawing.Pen>
+                                <GeometryDrawing.Geometry>
+                                    <GeometryGroup>
+                                        <LineGeometry StartPoint="0,0" EndPoint="32,0" />
+                                        <LineGeometry StartPoint="0,0" EndPoint="0,32" />
+                                    </GeometryGroup>
+                                </GeometryDrawing.Geometry>
+                            </GeometryDrawing>
+                        </DrawingBrush.Drawing>
+                    </DrawingBrush>
+                </Border.Background>
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="AmbientGridTransform" />
+                </Border.RenderTransform>
+            </Border>
+
             <Grid x:Name="FixedTitleBar"
                   Grid.Row="0"
                   Margin="20,0,16,0"
@@ -149,6 +222,60 @@
                         <TranslateTransform X="0" />
                     </ScrollViewer.RenderTransform>
                     <StackPanel Margin="20,0,20,22">
+                        <Border Margin="0,2,0,12"
+                                Padding="18,15"
+                                Background="{DynamicResource HeroCardBrush}"
+                                BorderBrush="{DynamicResource AccentBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="DashboardGreetingPrefixText"
+                                                   Foreground="{DynamicResource ScannerCyanBrush}"
+                                                   FontFamily="Segoe Script, Brush Script MT"
+                                                   FontSize="18"
+                                                   FontWeight="Bold"
+                                                   Text="Welcome, " />
+                                        <TextBlock x:Name="DashboardGreetingNameText"
+                                                   Margin="4,0,0,0"
+                                                   Foreground="{DynamicResource EarningsGreenBrush}"
+                                                   FontFamily="Segoe Script, Brush Script MT"
+                                                   FontSize="18"
+                                                   FontWeight="Bold"
+                                                   Text="Player" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="DashboardDateText"
+                                               Margin="0,4,0,0"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="10"
+                                               Text="Your heist ledger is ready." />
+                                    <Border x:Name="UsernameTipBorder"
+                                            Margin="0,9,0,0"
+                                            Padding="9,6"
+                                            HorizontalAlignment="Left"
+                                            Background="{DynamicResource AccentSurfaceBrush}"
+                                            BorderBrush="{DynamicResource AccentBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8">
+                                        <TextBlock Foreground="{DynamicResource SecondaryTextBrush}" FontSize="9" Text="TIP  •  Set your player name in Settings → Profile" />
+                                    </Border>
+                                </StackPanel>
+                                <Border Grid.Column="1"
+                                        Width="46"
+                                        Height="46"
+                                        Background="{DynamicResource AccentSurfaceBrush}"
+                                        BorderBrush="{DynamicResource AccentBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="14">
+                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource EarningsGreenBrush}" FontFamily="Impact" FontSize="18" Text="$" />
+                                </Border>
+                            </Grid>
+                        </Border>
                         <Grid Margin="0,2,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -211,26 +338,38 @@
                                 BorderThickness="1"
                                 CornerRadius="13">
                             <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="12" />
                                     <ColumnDefinition Width="1.35*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="SELECTED PAYOUT AREA" />
+                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="PAYOUT COMMAND" />
                                     <TextBlock x:Name="QuickCaptureStatusText"
                                                Margin="0,4,0,0"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="10"
-                                               Text="Scan the selected payout area"
+                                               Text="Capture and verify your selected GTA payout area"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                                 <Button x:Name="QuickCaptureButton"
                                         Grid.Column="2"
                                         Height="44"
                                         Style="{DynamicResource PrimaryButton}"
-                                        Content="QUICK SCAN"
+                                        Content="SCAN PAYOUT"
                                         Click="QuickCaptureButton_Click" />
+                            <TextBlock x:Name="QuickScanHotkeyHintText"
+                                       Grid.Row="1"
+                                       Grid.ColumnSpan="3"
+                                       Margin="0,8,0,0"
+                                       HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="9"
+                                       Text="Shortcut: Ctrl + Shift + H" />
                             </Grid>
                         </Border>
 
@@ -245,9 +384,8 @@
                                 <TextBlock x:Name="DayTotalText"
                                            Margin="0,5,0,0"
                                            Foreground="{DynamicResource EarningsGreenBrush}"
-                                           FontFamily="Segoe UI Variable Display, Segoe UI"
+                                           FontFamily="Impact, Haettenschweiler, Arial Narrow"
                                            FontSize="42"
-                                           FontWeight="SemiBold"
                                            Text="$0"
                                            TextTrimming="CharacterEllipsis" />
                                 <Border Height="2"
@@ -260,12 +398,21 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="11"
-                                               Text="Rolling 24-hour earnings" />
+                                    <StackPanel>
+                                        <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   FontSize="11"
+                                                   Text="24-hour earning session" />
+                                        <TextBlock x:Name="DayCountdownText"
+                                                   Margin="0,3,0,0"
+                                                   Foreground="{DynamicResource EarningsGreenBrush}"
+                                                   FontFamily="Consolas"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Text="Starts with your next payout" />
+                                    </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                                         <TextBlock Foreground="{DynamicResource MutedTextBrush}" FontSize="11" Text="Last payout  " />
-                                        <TextBlock x:Name="HeroLastPayoutText" FontSize="11" FontWeight="SemiBold" Text="$0" />
+                                        <TextBlock x:Name="HeroLastPayoutText" FontFamily="Impact, Haettenschweiler, Arial Narrow" FontSize="12" Text="$0" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -286,11 +433,16 @@
                                     </Grid>
                                     <TextBlock x:Name="WeekTotalText"
                                                Margin="0,8,0,0"
+                                               FontFamily="Impact, Haettenschweiler, Arial Narrow"
                                                FontSize="22"
-                                               FontWeight="SemiBold"
                                                Text="$0"
                                                TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Margin="0,5,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="Trailing seven days" />
+                                    <TextBlock x:Name="WeekCountdownText"
+                                               Margin="0,5,0,0"
+                                               Foreground="{DynamicResource ScannerCyanBrush}"
+                                               FontFamily="Consolas"
+                                               FontSize="10"
+                                               Text="Starts with your next payout" />
                                 </StackPanel>
                             </Border>
 
@@ -302,8 +454,8 @@
                                     </Grid>
                                     <TextBlock x:Name="LastPayoutText"
                                                Margin="0,8,0,0"
+                                               FontFamily="Impact, Haettenschweiler, Arial Narrow"
                                                FontSize="22"
-                                               FontWeight="SemiBold"
                                                Text="$0"
                                                TextTrimming="CharacterEllipsis" />
                                     <TextBlock x:Name="LastPayoutTimestampText"
@@ -318,8 +470,23 @@
                         <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
                             <StackPanel>
                                 <Grid>
-                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="WEEKLY EARNINGS" />
-                                    <TextBlock HorizontalAlignment="Right" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="LAST 7 CALENDAR DAYS" />
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Style="{DynamicResource MicroLabel}" Text="WEEKLY HISTORY" />
+                                    <TextBlock x:Name="SelectedWeekText"
+                                               Grid.Column="1"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="9"
+                                               Text="THIS WEEK" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                        <Button Height="26" MinWidth="30" Padding="8,0" Style="{DynamicResource GhostButton}" Content="‹" ToolTip="Previous week" Click="PreviousWeekButton_Click" />
+                                        <Button x:Name="NextWeekButton" Height="26" MinWidth="30" Margin="5,0,0,0" Padding="8,0" Style="{DynamicResource GhostButton}" Content="›" ToolTip="Next week" Click="NextWeekButton_Click" />
+                                    </StackPanel>
                                 </Grid>
                                 <ItemsControl x:Name="WeeklyChartItems" Margin="0,10,0,0">
                                     <ItemsControl.ItemsPanel>
@@ -450,8 +617,24 @@
                         <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
                             <StackPanel>
                                 <Grid>
-                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="RECENT ACTIVITY" />
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Style="{DynamicResource MicroLabel}" Text="TRANSACTION HISTORY" />
+                                    <TextBlock x:Name="HistoryDayTotalText"
+                                               Grid.Column="1"
+                                               Margin="12,0"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource EarningsGreenBrush}"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Text="$0" />
                                     <Button x:Name="RecentUndoButton"
+                                            Grid.Column="2"
+                                            Visibility="Collapsed"
                                             Height="28"
                                             Padding="10,0"
                                             HorizontalAlignment="Right"
@@ -459,6 +642,136 @@
                                             Content="Undo Last"
                                             Click="UndoLastButton_Click" />
                                 </Grid>
+                                <Expander Margin="0,12,0,8"
+                                          IsExpanded="False"
+                                          Style="{DynamicResource PremiumExpander}">
+                                    <Expander.Header>
+                                        <Grid Width="380">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Style="{DynamicResource MicroLabel}" Text="EARNING CALENDAR" />
+                                                <TextBlock x:Name="SelectedHistoryDateText" Margin="0,3,0,0" Foreground="{DynamicResource EarningsGreenBrush}" FontSize="10" FontWeight="SemiBold" Text="Today" />
+                                            </StackPanel>
+                                            <Border Grid.Column="1"
+                                                    Width="30"
+                                                    Height="30"
+                                                    VerticalAlignment="Center"
+                                                    Background="{DynamicResource AccentSurfaceBrush}"
+                                                    BorderBrush="{DynamicResource AccentBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="9">
+                                                <TextBlock HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           FontFamily="Segoe UI Symbol"
+                                                           FontSize="11"
+                                                           FontWeight="Bold"
+                                                           Foreground="{DynamicResource EarningsGreenBrush}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="▼" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsExpanded, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                                             Value="True">
+                                                                    <Setter Property="Text" Value="▲" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+                                        </Grid>
+                                    </Expander.Header>
+                                    <Border Margin="0,10,0,0"
+                                        Padding="12"
+                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        BorderBrush="{DynamicResource MutedBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="12">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Button Height="30" MinWidth="34" Padding="8,0" Style="{DynamicResource GhostButton}" Content="‹" ToolTip="Previous month" Click="PreviousCalendarMonthButton_Click" />
+                                            <TextBlock x:Name="CalendarMonthText"
+                                                       Grid.Column="1"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="14"
+                                                       FontWeight="SemiBold"
+                                                       Text="July 2026" />
+                                            <Button x:Name="NextCalendarMonthButton" Grid.Column="2" Height="30" MinWidth="34" Padding="8,0" Style="{DynamicResource GhostButton}" Content="›" ToolTip="Next month" Click="NextCalendarMonthButton_Click" />
+                                        </Grid>
+                                        <UniformGrid Margin="2,12,2,5" Columns="7">
+                                            <TextBlock Style="{DynamicResource CalendarWeekdayLabel}" Text="S" />
+                                            <TextBlock Style="{DynamicResource CalendarWeekdayLabel}" Text="M" />
+                                            <TextBlock Style="{DynamicResource CalendarWeekdayLabel}" Text="T" />
+                                            <TextBlock Style="{DynamicResource CalendarWeekdayLabel}" Text="W" />
+                                            <TextBlock Style="{DynamicResource CalendarWeekdayLabel}" Text="T" />
+                                            <TextBlock Style="{DynamicResource CalendarWeekdayLabel}" Text="F" />
+                                            <TextBlock Style="{DynamicResource CalendarWeekdayLabel}" Text="S" />
+                                        </UniformGrid>
+                                        <ItemsControl x:Name="CalendarDayItems">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <UniformGrid Columns="7" Rows="6" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Height="36"
+                                                            Margin="2"
+                                                            Padding="0"
+                                                            AutomationProperties.Name="{Binding Date, StringFormat={}{0:dddd, MMMM d}}"
+                                                            IsEnabled="{Binding IsEnabled}"
+                                                            Tag="{Binding Date}"
+                                                            ToolTip="{Binding Date, StringFormat={}{0:dddd, MMMM d}}"
+                                                            Click="CalendarDayButton_Click">
+                                                        <Grid>
+                                                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Text="{Binding DayText}" />
+                                                            <Ellipse Width="4" Height="4" Margin="0,0,0,4" HorizontalAlignment="Center" VerticalAlignment="Bottom" Fill="{DynamicResource EarningsGreenBrush}">
+                                                                <Ellipse.Style>
+                                                                    <Style TargetType="Ellipse">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding HasEarnings}" Value="True">
+                                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Ellipse.Style>
+                                                            </Ellipse>
+                                                        </Grid>
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource CalendarDayButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
+                                                                        <Setter Property="Opacity" Value="0.32" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                                        <Setter Property="BorderBrush" Value="{DynamicResource ScannerCyanBrush}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                        <Setter Property="Background" Value="{DynamicResource EarningsGreenBrush}" />
+                                                                        <Setter Property="BorderBrush" Value="{DynamicResource EarningsGreenBrush}" />
+                                                                        <Setter Property="Foreground" Value="#FF081009" />
+                                                                        <Setter Property="FontWeight" Value="Bold" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                    </Border>
+                                </Expander>
                                 <ItemsControl x:Name="RecentActivityItems" Margin="0,8,0,0">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
@@ -467,6 +780,7 @@
                                                     <ColumnDefinition Width="30" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="68" />
                                                 </Grid.ColumnDefinitions>
                                                 <Ellipse Width="22" Height="22" Fill="#1FA6FF5F" Stroke="#55A6FF5F" StrokeThickness="1" />
                                                 <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource EarningsGreenBrush}" FontSize="11" Text="+" />
@@ -480,7 +794,17 @@
                                                            FontSize="12"
                                                            FontWeight="SemiBold"
                                                            Text="{Binding AmountText}" />
-                                                <Border Grid.ColumnSpan="3"
+                                                <Button Grid.Column="3"
+                                                        Height="28"
+                                                        Margin="10,0,0,0"
+                                                        Padding="8,0"
+                                                        VerticalAlignment="Center"
+                                                        Style="{DynamicResource DangerButton}"
+                                                        FontSize="9"
+                                                        Content="DELETE"
+                                                        Tag="{Binding RecordId}"
+                                                        Click="DeleteRecentEarningButton_Click" />
+                                                <Border Grid.ColumnSpan="4"
                                                         Height="1"
                                                         VerticalAlignment="Bottom"
                                                         Background="{DynamicResource MutedBorderBrush}" />
@@ -492,11 +816,11 @@
                                            Margin="0,8,0,0"
                                            Foreground="{DynamicResource MutedTextBrush}"
                                            FontSize="11"
-                                           Text="No confirmed earnings yet." />
+                                           Text="No earnings saved for this day." />
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}" Visibility="Collapsed">
                             <Expander x:Name="PayoutScannerExpander"
                                       Style="{DynamicResource PremiumExpander}">
                                 <Expander.Header>
@@ -534,7 +858,7 @@
                                     <TextBlock Margin="0,5,0,0"
                                                Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="9"
-                                               Text="Select the complete TOTAL CASH EARNED heading and the full amount below it. Leave a small border around both lines."
+                                               Text="Select either the complete TOTAL CASH EARNED result or the green cash icon with the full amount beside it. Leave a small border around everything."
                                                TextWrapping="Wrap" />
 
                                     <Grid Margin="0,10,0,0">
@@ -707,6 +1031,7 @@
                                 </Grid>
                                 <TextBlock x:Name="DetectedPayoutText"
                                            Margin="0,8,0,0"
+                                           FontFamily="Impact, Haettenschweiler, Arial Narrow"
                                            FontSize="28"
                                            FontWeight="SemiBold"
                                            Text="Detected payout: $0" />
@@ -756,7 +1081,7 @@
                                         CornerRadius="9">
                                     <StackPanel>
                                         <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="EDIT DETECTED AMOUNT" />
-                                        <TextBox x:Name="ExpandedEditAmountTextBox" Height="42" Margin="0,7,0,0" Padding="11,0" FontSize="16" VerticalContentAlignment="Center" KeyDown="PendingEditTextBox_KeyDown" />
+                                        <TextBox x:Name="ExpandedEditAmountTextBox" Height="46" Margin="0,9,0,0" Padding="12,0" Style="{DynamicResource PremiumAmountTextBox}" FontFamily="Impact, Haettenschweiler, Arial Narrow" FontSize="19" VerticalContentAlignment="Center" KeyDown="PendingEditTextBox_KeyDown" />
                                         <TextBlock x:Name="ExpandedEditValidationText" MinHeight="14" Margin="2,5,2,0" Foreground="{DynamicResource ErrorRedBrush}" FontSize="10" TextWrapping="Wrap" />
                                         <Grid Margin="0,7,0,0">
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -803,6 +1128,33 @@
 
                         <Border Margin="0,14,0,0" Style="{DynamicResource Card}">
                             <StackPanel>
+                                <Grid>
+                                    <StackPanel>
+                                        <TextBlock Style="{DynamicResource MicroLabel}" Text="PLAYER PROFILE" />
+                                        <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" Text="Your name appears in greetings and Discord payout posts." TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Border HorizontalAlignment="Right" Padding="9,5" Background="{DynamicResource AccentSurfaceBrush}" BorderBrush="{DynamicResource AccentBorderBrush}" BorderThickness="1" CornerRadius="9">
+                                        <TextBlock Foreground="{DynamicResource EarningsGreenBrush}" FontSize="9" FontWeight="SemiBold" Text="PROFILE" />
+                                    </Border>
+                                </Grid>
+                                <TextBlock Margin="0,13,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Player name" />
+                                <TextBox x:Name="ProfileUsernameTextBox"
+                                         Height="44"
+                                         Margin="0,6,0,0"
+                                         Padding="12,0"
+                                         Style="{DynamicResource PremiumAmountTextBox}"
+                                         FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="13"
+                                         MaxLength="80"
+                                         VerticalContentAlignment="Center"
+                                         ToolTip="Leave blank to use Player" />
+                                <Button Margin="0,10,0,0" Style="{DynamicResource PrimaryButton}" Content="SAVE PLAYER NAME" Click="SaveProfileButton_Click" />
+                                <TextBlock x:Name="ProfileStatusText" Margin="2,8,2,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="If blank, the app will call you Player." TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
                                 <TextBlock Style="{DynamicResource MicroLabel}" Text="APPEARANCE" />
                                 <TextBlock Margin="0,7,0,0"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
@@ -834,11 +1186,11 @@
 
                         <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="GLOBAL SHORTCUT" />
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="QUICK SCAN SHORTCUT" />
                                 <CheckBox x:Name="HotkeyEnabledCheckBox"
                                           Margin="0,14,0,0"
                                           Style="{DynamicResource ToggleSwitch}"
-                                          Content="Enable global shortcut" />
+                                          Content="Enable Quick Scan shortcut" />
                                 <Border Margin="0,13,0,0"
                                         Padding="12"
                                         Background="{DynamicResource SecondaryBackgroundBrush}"
@@ -897,6 +1249,43 @@
                                            FontSize="10"
                                            Text="Registration status: Waiting for startup"
                                            TextWrapping="Wrap" />
+
+                                <Border Height="1" Margin="0,18,0,16" Background="{DynamicResource MutedBorderBrush}" />
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="MINIMIZE APP SHORTCUT" />
+                                <CheckBox x:Name="MinimizeHotkeyEnabledCheckBox"
+                                          Margin="0,14,0,0"
+                                          Style="{DynamicResource ToggleSwitch}"
+                                          Content="Enable minimize shortcut" />
+                                <Border Margin="0,13,0,0"
+                                        Padding="12"
+                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        BorderBrush="{DynamicResource MutedBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="CURRENT MINIMIZE SHORTCUT" />
+                                            <TextBlock x:Name="CurrentMinimizeHotkeyText" Margin="0,4,0,0" FontSize="16" FontWeight="SemiBold" Text="Ctrl + Shift + M" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="ProposedMinimizeHotkeyText" Grid.Column="1" VerticalAlignment="Center" Foreground="{DynamicResource ScannerCyanBrush}" FontSize="11" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock x:Name="MinimizeHotkeyWarningText" Visibility="Collapsed" Margin="0,9,0,0" Foreground="{DynamicResource WarningGoldBrush}" FontSize="10" TextWrapping="Wrap" />
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="RecordMinimizeHotkeyButton" Style="{DynamicResource SecondaryButton}" Content="Record Minimize Shortcut" Click="RecordMinimizeHotkeyButton_Click" />
+                                    <Button Grid.Column="2" Style="{DynamicResource GhostButton}" Content="Reset to Ctrl + Shift + M" Click="ResetMinimizeHotkeyButton_Click" />
+                                </Grid>
+                                <Button Margin="0,9,0,0" Style="{DynamicResource PrimaryButton}" Content="Apply Minimize Shortcut" Click="ApplyMinimizeHotkeyButton_Click" />
+                                <TextBlock x:Name="MinimizeHotkeyRegistrationStatusText" Margin="0,9,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Registration status: Waiting for startup" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 
@@ -932,7 +1321,7 @@
                                 <TextBlock Margin="0,10,0,0"
                                            Foreground="{DynamicResource MutedTextBrush}"
                                            FontSize="10"
-                                           Text="The global shortcut hides this window without closing it. Quick Scan remains available when you show the same window again."
+                                           Text="Quick Scan and minimize use separate shortcuts. Quick Scan can capture while the app is minimized, then returns with the result ready for confirmation."
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
@@ -1033,6 +1422,25 @@
                                            FontSize="10"
                                            Text="Selected payout area: Not selected"
                                            TextWrapping="Wrap" />
+                                <Border Height="145"
+                                        Margin="0,12,0,0"
+                                        Background="{DynamicResource PreviewBackgroundBrush}"
+                                        BorderBrush="{DynamicResource AccentBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="12"
+                                        ClipToBounds="True">
+                                    <Grid>
+                                        <Image x:Name="SettingsCapturePreviewImage" Margin="6" Stretch="Uniform" />
+                                        <StackPanel x:Name="SettingsCapturePreviewPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock HorizontalAlignment="Center" Foreground="{DynamicResource ScannerCyanBrush}" FontSize="20" Text="▣" />
+                                            <TextBlock Margin="0,7,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="Capture-area preview" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Button Margin="0,9,0,0"
+                                        Style="{DynamicResource PrimaryButton}"
+                                        Content="PREVIEW SELECTED AREA"
+                                        Click="PreviewSettingsCaptureButton_Click" />
                                 <Grid Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -1081,29 +1489,6 @@
                                 </Grid>
 
                                 <TextBlock Margin="0,14,0,0"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="10"
-                                           Text="Display username (required)" />
-                                <Border Height="40"
-                                        Margin="0,6,0,0"
-                                        Background="{DynamicResource SecondaryBackgroundBrush}"
-                                        BorderBrush="{DynamicResource BorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="9">
-                                    <TextBox x:Name="DiscordUsernameTextBox"
-                                             Padding="12,0"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             CaretBrush="{DynamicResource PrimaryTextBrush}"
-                                             Foreground="{DynamicResource PrimaryTextBrush}"
-                                             FontFamily="Segoe UI Variable Text, Segoe UI"
-                                             FontSize="12"
-                                             MaxLength="80"
-                                             VerticalContentAlignment="Center"
-                                             ToolTip="The name shown with each payout" />
-                                </Border>
-
-                                <TextBlock Margin="0,12,0,0"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="10"
                                            Text="Discord webhook URL" />
@@ -1200,7 +1585,7 @@
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="12"
                                    LineHeight="19"
-                                   Text="Select the area where GTA displays “TOTAL CASH EARNED” and the complete amount below it. Leave a small border around both lines."
+                                   Text="Select either the complete TOTAL CASH EARNED result or the green cash icon with the full amount beside it. Leave a small border around everything."
                                    TextWrapping="Wrap" />
                         <Border x:Name="SetupPreviewBorder"
                                 Visibility="Collapsed"
@@ -1254,7 +1639,8 @@
                     <Border Padding="12" Background="{DynamicResource HeroCardBrush}" BorderBrush="{DynamicResource AccentBorderBrush}" BorderThickness="1" CornerRadius="12">
                         <StackPanel>
                             <TextBlock Style="{DynamicResource MicroLabel}" FontSize="8" Text="LAST 24 HOURS" />
-                            <TextBlock x:Name="CompactDayTotalText" Margin="0,4,0,0" Foreground="{DynamicResource EarningsGreenBrush}" FontSize="27" FontWeight="SemiBold" Text="$0" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="CompactDayTotalText" Margin="0,4,0,0" Foreground="{DynamicResource EarningsGreenBrush}" FontFamily="Impact, Haettenschweiler, Arial Narrow" FontSize="27" Text="$0" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="CompactDayCountdownText" Margin="0,3,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontFamily="Consolas" FontSize="8" Text="Starts with your next payout" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Border>
                     <Grid Grid.Row="1" Margin="0,8,0,0">
@@ -1266,13 +1652,14 @@
                         <Border Padding="10" Background="{DynamicResource ElevatedCardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10">
                             <StackPanel>
                                 <TextBlock Style="{DynamicResource MicroLabel}" FontSize="8" Text="7 DAYS" />
-                                <TextBlock x:Name="CompactWeekTotalText" Margin="0,4,0,0" FontSize="17" FontWeight="SemiBold" Text="$0" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="CompactWeekTotalText" Margin="0,4,0,0" FontFamily="Impact, Haettenschweiler, Arial Narrow" FontSize="17" Text="$0" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="CompactWeekCountdownText" Margin="0,3,0,0" Foreground="{DynamicResource ScannerCyanBrush}" FontFamily="Consolas" FontSize="8" Text="Starts with your next payout" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="2" Padding="10" Background="{DynamicResource ElevatedCardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10">
                             <StackPanel>
                                 <TextBlock Style="{DynamicResource MicroLabel}" FontSize="8" Text="LAST PAYOUT" />
-                                <TextBlock x:Name="CompactLastPayoutText" Margin="0,4,0,0" FontSize="17" FontWeight="SemiBold" Text="$0" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="CompactLastPayoutText" Margin="0,4,0,0" FontFamily="Impact, Haettenschweiler, Arial Narrow" FontSize="17" Text="$0" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -1325,7 +1712,7 @@
                         CornerRadius="13">
                     <StackPanel>
                         <TextBlock x:Name="CompactPendingHeadingText" Foreground="{DynamicResource EarningsGreenBrush}" FontSize="10" FontWeight="SemiBold" Text="PAYOUT FOUND — VERIFY BEFORE SAVING" />
-                        <TextBlock x:Name="CompactPendingText" Margin="0,6,0,0" FontSize="29" FontWeight="SemiBold" Text="$0" />
+                        <TextBlock x:Name="CompactPendingText" Margin="0,6,0,0" FontFamily="Impact, Haettenschweiler, Arial Narrow" FontSize="30" Text="$0" />
                         <TextBlock x:Name="CompactPendingMetaText" Margin="0,5,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Confidence: --  •  Readers agreeing: --" TextWrapping="Wrap" />
                         <TextBlock x:Name="CompactVerificationStatusText" Margin="0,3,0,0" Foreground="{DynamicResource WarningGoldBrush}" FontSize="10" FontWeight="SemiBold" Text="VERIFICATION REQUIRED" />
                         <TextBlock x:Name="CompactPendingConflictText" Margin="0,3,0,0" Foreground="{DynamicResource WarningGoldBrush}" FontSize="10" Text="Possible conflict: None" TextWrapping="Wrap" />
@@ -1367,7 +1754,7 @@
                             <Image x:Name="CompactEditPreviewImage" Margin="4" Stretch="Uniform" />
                         </Border>
                         <TextBlock Margin="2,6,2,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="9" Text="Read the exact amount from this captured GTA image, then enter it below." TextWrapping="Wrap" />
-                        <TextBox x:Name="CompactEditAmountTextBox" Height="44" Margin="0,10,0,0" Padding="12,0" FontSize="17" VerticalContentAlignment="Center" KeyDown="PendingEditTextBox_KeyDown" />
+                        <TextBox x:Name="CompactEditAmountTextBox" Height="46" Margin="0,10,0,0" Padding="12,0" Style="{DynamicResource PremiumAmountTextBox}" FontFamily="Impact, Haettenschweiler, Arial Narrow" FontSize="19" VerticalContentAlignment="Center" KeyDown="PendingEditTextBox_KeyDown" />
                         <TextBlock x:Name="CompactEditValidationText" MinHeight="14" Margin="2,6,2,0" Foreground="{DynamicResource ErrorRedBrush}" FontSize="10" TextWrapping="Wrap" />
                         <Grid Margin="0,9,0,0">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -1400,6 +1787,7 @@
                     <StackPanel>
                         <TextBlock x:Name="QuickCaptureNotificationAmount"
                                    Foreground="{DynamicResource EarningsGreenBrush}"
+                                   FontFamily="Impact, Haettenschweiler, Arial Narrow"
                                    FontSize="15"
                                    FontWeight="SemiBold"
                                    Text="Added $0" />
@@ -1418,6 +1806,71 @@
                             Click="QuickCaptureUndoButton_Click" />
                 </Grid>
             </Border>
+
+            <Grid x:Name="LoadingOverlay"
+                  Grid.RowSpan="3"
+                  Panel.ZIndex="200"
+                  IsHitTestVisible="True">
+                <Grid.Background>
+                    <RadialGradientBrush Center="0.5,0.42" GradientOrigin="0.5,0.42" RadiusX="0.78" RadiusY="0.78">
+                        <GradientStop Color="{DynamicResource ElevatedCardColor}" Offset="0" />
+                        <GradientStop Color="{DynamicResource MainBackgroundColor}" Offset="0.62" />
+                        <GradientStop Color="#FF030508" Offset="1" />
+                    </RadialGradientBrush>
+                </Grid.Background>
+                <Ellipse Width="360" Height="360" Margin="-190,-190,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="{DynamicResource EarningsGreenBrush}" Opacity="0.12">
+                    <Ellipse.Effect><BlurEffect Radius="95" /></Ellipse.Effect>
+                </Ellipse>
+                <Ellipse Width="330" Height="330" Margin="0,0,-175,-155" HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="{DynamicResource ScannerCyanBrush}" Opacity="0.10">
+                    <Ellipse.Effect><BlurEffect Radius="90" /></Ellipse.Effect>
+                </Ellipse>
+                <Grid x:Name="LoadingContent" Width="370" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                    <Grid.Effect>
+                        <BlurEffect x:Name="LoadingContentBlur" Radius="0" />
+                    </Grid.Effect>
+                    <Grid.RenderTransform>
+                        <ScaleTransform x:Name="LoadingContentScale" ScaleX="1" ScaleY="1" />
+                    </Grid.RenderTransform>
+                    <StackPanel>
+                        <Grid Width="138" Height="138" HorizontalAlignment="Center">
+                            <Ellipse Stroke="{DynamicResource EarningsGreenBrush}" StrokeThickness="2" StrokeDashArray="3,5" Opacity="0.72" RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform><RotateTransform x:Name="LoadingOuterRingRotation" /></Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse Margin="12" Stroke="{DynamicResource ScannerCyanBrush}" StrokeThickness="1.5" StrokeDashArray="1,7" Opacity="0.75" RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform><RotateTransform x:Name="LoadingInnerRingRotation" /></Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse Margin="25" Fill="{DynamicResource AccentSurfaceBrush}" Stroke="{DynamicResource AccentBorderBrush}" StrokeThickness="1" />
+                            <Image Width="68" Height="68" HorizontalAlignment="Center" VerticalAlignment="Center" Source="Assets/AppIcon.png" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                        </Grid>
+                        <TextBlock Margin="0,16,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" FontWeight="SemiBold" Text="HEIST LEDGER • SECURE LOCAL SESSION" />
+                        <StackPanel Margin="0,13,0,0" HorizontalAlignment="Center" Orientation="Horizontal">
+                            <TextBlock x:Name="GreetingPrefixText" Foreground="{DynamicResource ScannerCyanBrush}" FontFamily="Segoe Script, Brush Script MT" FontSize="28" FontWeight="Bold" Text="Welcome, " />
+                            <TextBlock x:Name="GreetingNameText" Margin="5,0,0,0" Foreground="{DynamicResource EarningsGreenBrush}" FontFamily="Segoe Script, Brush Script MT" FontSize="28" FontWeight="Bold" Text="Player" />
+                        </StackPanel>
+                        <TextBlock x:Name="LoadingStatusText" Margin="0,8,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" Text="Preparing your next score…" />
+                        <StackPanel Margin="0,11,0,0" HorizontalAlignment="Center" Orientation="Horizontal">
+                            <Ellipse x:Name="LoadingDotOne" Width="5" Height="5" Fill="{DynamicResource EarningsGreenBrush}" />
+                            <Ellipse x:Name="LoadingDotTwo" Width="5" Height="5" Margin="7,0,0,0" Fill="{DynamicResource EarningsGreenBrush}" />
+                            <Ellipse x:Name="LoadingDotThree" Width="5" Height="5" Margin="7,0,0,0" Fill="{DynamicResource EarningsGreenBrush}" />
+                        </StackPanel>
+                        <Border Height="4" Margin="48,22" Background="{DynamicResource SecondaryBackgroundBrush}" BorderBrush="{DynamicResource MutedBorderBrush}" BorderThickness="1" CornerRadius="2" ClipToBounds="True">
+                            <Grid>
+                                <Border x:Name="LoadingProgressBar" Width="0" HorizontalAlignment="Left" Background="{DynamicResource EarningsGreenBrush}" CornerRadius="2" />
+                                <Border Width="70" HorizontalAlignment="Left" Opacity="0.55">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                            <GradientStop Color="Transparent" Offset="0" />
+                                            <GradientStop Color="White" Offset="0.5" />
+                                            <GradientStop Color="Transparent" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.RenderTransform><TranslateTransform x:Name="LoadingProgressSheenTransform" X="-90" /></Border.RenderTransform>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Grid>
         </Grid>
     </Border>
 </Window>

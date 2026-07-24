@@ -33,6 +33,9 @@ internal static class Program
             ("test 3.png", 968_000L),
             ("test 4.png", 2_538_000L),
             ("test 5.png", 3_615_920L),
+            ("test 8.png", 1_188_830L),
+            ("test 9.png", 864_000L),
+            ("test 10.png", 13_875_000L),
             ("Screenshot 2026-07-15 202447.png", 3_485_830L),
             ("Screenshot 2026-07-15 202518.png", 2_491_190L),
             ("Screenshot 2026-07-15 202555.png", 2_540_540L)
