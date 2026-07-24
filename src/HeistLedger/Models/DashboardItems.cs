@@ -7,6 +7,16 @@ public sealed record DailyEarningsChartItem(
     double Opacity);
 
 public sealed record RecentEarningItem(
+    Guid RecordId,
     string SourceLabel,
     string AmountText,
     string LocalTimeText);
+
+public sealed record CalendarDayItem(
+    DateTime Date,
+    string DayText,
+    bool IsCurrentMonth,
+    bool IsToday,
+    bool IsSelected,
+    bool HasEarnings,
+    bool IsEnabled);

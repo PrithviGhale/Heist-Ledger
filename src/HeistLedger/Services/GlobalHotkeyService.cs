@@ -17,17 +17,17 @@ public enum GlobalHotkeyModifiers : uint
 
 public sealed class GlobalHotkeyService : IDisposable
 {
-    private const int HotkeyId = 0x484C;
     private const int WmHotkey = 0x0312;
 
     private readonly IntPtr _windowHandle;
     private readonly HwndSource _source;
+    private readonly int _hotkeyId;
     private bool _isRegistered;
     private bool _disposed;
     private GlobalHotkeyModifiers _registeredModifiers;
     private uint _registeredVirtualKey;
 
-    public GlobalHotkeyService(IntPtr windowHandle)
+    public GlobalHotkeyService(IntPtr windowHandle, int hotkeyId = 0x484C)
     {
         if (windowHandle == IntPtr.Zero)
         {
@@ -35,6 +35,7 @@ public sealed class GlobalHotkeyService : IDisposable
         }
 
         _windowHandle = windowHandle;
+        _hotkeyId = hotkeyId;
         _source = HwndSource.FromHwnd(windowHandle)
             ?? throw new InvalidOperationException("The WPF window source is unavailable.");
         _source.AddHook(WindowMessageHook);
@@ -66,7 +67,7 @@ public sealed class GlobalHotkeyService : IDisposable
 
         if (RegisterHotKey(
                 _windowHandle,
-                HotkeyId,
+                _hotkeyId,
                 (uint)(modifiers | GlobalHotkeyModifiers.NoRepeat),
                 virtualKey))
         {
@@ -80,7 +81,7 @@ public sealed class GlobalHotkeyService : IDisposable
         if (hadPreviousRegistration &&
             RegisterHotKey(
                 _windowHandle,
-                HotkeyId,
+                _hotkeyId,
                 (uint)(previousModifiers | GlobalHotkeyModifiers.NoRepeat),
                 previousVirtualKey))
         {
@@ -118,7 +119,7 @@ public sealed class GlobalHotkeyService : IDisposable
         IntPtr lParam,
         ref bool handled)
     {
-        if (message == WmHotkey && wParam.ToInt32() == HotkeyId)
+        if (message == WmHotkey && wParam.ToInt32() == _hotkeyId)
         {
             handled = true;
             HotkeyPressed?.Invoke(this, EventArgs.Empty);
@@ -134,7 +135,7 @@ public sealed class GlobalHotkeyService : IDisposable
             return;
         }
 
-        _ = UnregisterHotKey(_windowHandle, HotkeyId);
+        _ = UnregisterHotKey(_windowHandle, _hotkeyId);
         _isRegistered = false;
     }
 

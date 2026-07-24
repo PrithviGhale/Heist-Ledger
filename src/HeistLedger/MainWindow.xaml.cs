@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using GTAEarningsTracker.Models;
@@ -19,7 +20,7 @@ namespace GTAEarningsTracker;
 public partial class MainWindow : Window
 {
     public const double CompactWindowWidth = 420;
-    public const double CompactNormalHeight = 340;
+    public const double CompactNormalHeight = 365;
     public const double CompactPendingHeight = 610;
 
     private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
@@ -31,6 +32,7 @@ public partial class MainWindow : Window
         NumberStyles.AllowTrailingWhite;
 
     private readonly EarningsStorageService _storageService = new();
+    private readonly EarningsSessionService _earningsSessionService = new();
     private readonly CaptureSettingsService _captureSettingsService = new();
     private readonly UiPreferencesService _uiPreferencesService = new();
     private readonly UiThemeService _uiThemeService = new();
@@ -45,12 +47,14 @@ public partial class MainWindow : Window
     private readonly PaddleOcrRecognitionService _paddleOcrService = new();
     private readonly PayoutDetectionService _payoutDetectionService;
     private readonly GtaLargeDigitReaderService _largeDigitReaderService;
+    private readonly GreenCashPayoutDetectionService _greenCashPayoutDetectionService;
     private readonly ContinuousScreenCaptureService _continuousCaptureService;
     private readonly BackgroundScannerService _backgroundScannerService;
     private readonly PayoutDuplicateGuard _duplicateGuard = new();
     private readonly SemaphoreSlim _ocrScanSemaphore = new(1, 1);
     private readonly CancellationTokenSource _shutdownCancellation = new();
     private readonly DispatcherTimer _refreshTimer;
+    private readonly DispatcherTimer _countdownTimer;
     private readonly DispatcherTimer _livePreviewTimer;
     private readonly DispatcherTimer _quickCaptureNotificationTimer;
     private readonly DispatcherTimer _settingsSaveTimer;
@@ -68,6 +72,7 @@ public partial class MainWindow : Window
     private string _pendingPayoutSource = "OCR";
     private byte[]? _pendingPayoutScreenshotPng;
     private GlobalHotkeyService? _globalHotkeyService;
+    private GlobalHotkeyService? _minimizeHotkeyService;
     private TrayIconService? _trayIconService;
     private EarningRecord? _quickCaptureNotificationRecord;
     private bool _isClosing;
@@ -82,6 +87,9 @@ public partial class MainWindow : Window
     private bool _resumeScannerAfterShow;
     private bool _suppressSettingsUiEvents;
     private bool _rescanInProgress;
+    private DateTime _selectedHistoryDate = DateTime.Today;
+    private DateTime _displayedHistoryMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime _selectedHistoryWeekStart = StartOfWeek(DateTime.Today);
     private string _selectedTab = "Dashboard";
     private GtaResultScreenDiagnostics? _latestGtaDiagnostics;
     private Int32Rect? _windowPhysicalBounds;
@@ -90,8 +98,19 @@ public partial class MainWindow : Window
         GlobalHotkeyModifiers.Control | GlobalHotkeyModifiers.Shift;
     private uint _proposedHotkeyVirtualKey = 0x48;
     private string _proposedHotkeyText = "Ctrl + Shift + H";
+    private GlobalHotkeyModifiers _proposedMinimizeHotkeyModifiers =
+        GlobalHotkeyModifiers.Control | GlobalHotkeyModifiers.Shift;
+    private uint _proposedMinimizeHotkeyVirtualKey = 0x4D;
+    private string _proposedMinimizeHotkeyText = "Ctrl + Shift + M";
+    private HotkeyRecordingTarget _hotkeyRecordingTarget = HotkeyRecordingTarget.QuickScan;
 
     private sealed record PendingScanAttempt(long? Amount, int AgreeingReaders, bool Recognized);
+
+    private enum HotkeyRecordingTarget
+    {
+        QuickScan,
+        Minimize
+    }
 
     public MainWindow()
     {
@@ -107,6 +126,7 @@ public partial class MainWindow : Window
             _payoutDetectionService,
             _amountOcrService,
             _paddleOcrService);
+        _greenCashPayoutDetectionService = new GreenCashPayoutDetectionService(_amountOcrService);
         _continuousCaptureService = new ContinuousScreenCaptureService(_screenCaptureService);
         _backgroundScannerService = new BackgroundScannerService(
             _continuousCaptureService,
@@ -121,6 +141,12 @@ public partial class MainWindow : Window
             Interval = TimeSpan.FromMinutes(1)
         };
         _refreshTimer.Tick += (_, _) => RefreshTotals();
+
+        _countdownTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _countdownTimer.Tick += (_, _) => RefreshSessionDisplays(DateTime.UtcNow);
 
         _livePreviewTimer = new DispatcherTimer
         {
@@ -152,16 +178,200 @@ public partial class MainWindow : Window
     private void Window_SourceInitialized(object? sender, EventArgs e)
     {
         var windowHandle = new WindowInteropHelper(this).Handle;
-        _globalHotkeyService = new GlobalHotkeyService(windowHandle);
+        _globalHotkeyService = new GlobalHotkeyService(windowHandle, 0x484C);
         _globalHotkeyService.HotkeyPressed += GlobalHotkeyService_HotkeyPressed;
+        _minimizeHotkeyService = new GlobalHotkeyService(windowHandle, 0x484D);
+        _minimizeHotkeyService.HotkeyPressed += MinimizeHotkeyService_HotkeyPressed;
         _trayIconService = new TrayIconService();
         _trayIconService.ShowRequested += TrayIconService_ShowRequested;
         _trayIconService.ExitRequested += TrayIconService_ExitRequested;
         UpdateWindowCaptureBounds();
     }
 
+    private void PrepareLoadingExperience()
+    {
+        var hour = DateTime.Now.Hour;
+        var greeting = hour < 12
+            ? "Good morning"
+            : hour < 18
+                ? "Good afternoon"
+                : "Good evening";
+        GreetingPrefixText.Text = $"{greeting},";
+        GreetingNameText.Text = " Player";
+        LoadingStatusText.Text = "Preparing your next score…";
+        LoadingOverlay.Visibility = Visibility.Visible;
+        LoadingOverlay.Opacity = 0;
+        LoadingContent.Opacity = 0;
+        LoadingContentScale.ScaleX = 0.78;
+        LoadingContentScale.ScaleY = 0.78;
+        LoadingContentBlur.Radius = 14;
+        var entranceEase = new BackEase
+        {
+            Amplitude = 0.22,
+            EasingMode = EasingMode.EaseOut
+        };
+        LoadingOverlay.BeginAnimation(
+            OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(420)));
+        LoadingContent.BeginAnimation(
+            OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(720)));
+        LoadingContentScale.BeginAnimation(
+            ScaleTransform.ScaleXProperty,
+            new DoubleAnimation(0.78, 1, TimeSpan.FromMilliseconds(780))
+            {
+                EasingFunction = entranceEase
+            });
+        LoadingContentScale.BeginAnimation(
+            ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(0.78, 1, TimeSpan.FromMilliseconds(780))
+            {
+                EasingFunction = entranceEase
+            });
+        LoadingContentBlur.BeginAnimation(
+            BlurEffect.RadiusProperty,
+            new DoubleAnimation(14, 0, TimeSpan.FromMilliseconds(650)));
+        LoadingOuterRingRotation.BeginAnimation(
+            RotateTransform.AngleProperty,
+            new DoubleAnimation(0, 360, TimeSpan.FromSeconds(3.4))
+            {
+                RepeatBehavior = RepeatBehavior.Forever
+            });
+        LoadingInnerRingRotation.BeginAnimation(
+            RotateTransform.AngleProperty,
+            new DoubleAnimation(360, 0, TimeSpan.FromSeconds(4.6))
+            {
+                RepeatBehavior = RepeatBehavior.Forever
+            });
+        AnimateLoadingDot(LoadingDotOne, TimeSpan.Zero);
+        AnimateLoadingDot(LoadingDotTwo, TimeSpan.FromMilliseconds(180));
+        AnimateLoadingDot(LoadingDotThree, TimeSpan.FromMilliseconds(360));
+        LoadingProgressBar.BeginAnimation(
+            WidthProperty,
+            new DoubleAnimation(0, 274, TimeSpan.FromMilliseconds(1850))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+            });
+        LoadingProgressSheenTransform.BeginAnimation(
+            TranslateTransform.XProperty,
+            new DoubleAnimation(-90, 320, TimeSpan.FromMilliseconds(1250))
+            {
+                RepeatBehavior = RepeatBehavior.Forever,
+                BeginTime = TimeSpan.FromMilliseconds(300)
+            });
+    }
+
+    private static void AnimateLoadingDot(UIElement dot, TimeSpan delay)
+    {
+        dot.BeginAnimation(
+            OpacityProperty,
+            new DoubleAnimation(0.18, 1, TimeSpan.FromMilliseconds(520))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                BeginTime = delay,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            });
+    }
+
+    private async Task CompleteLoadingExperienceAsync()
+    {
+        var displayName = string.IsNullOrWhiteSpace(_discordSettings.Username)
+            ? "Player"
+            : _discordSettings.Username.Trim();
+        var hour = DateTime.Now.Hour;
+        var greeting = hour < 12
+            ? "Good morning"
+            : hour < 18
+                ? "Good afternoon"
+                : "Good evening";
+        GreetingPrefixText.Text = $"{greeting},";
+        GreetingNameText.Text = $" {displayName}";
+        LoadingStatusText.Text = "Loaded — enjoy your session.";
+        await Task.Delay(1900);
+
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(650))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+        };
+        fade.Completed += (_, _) => completion.TrySetResult();
+        LoadingContentBlur.BeginAnimation(
+            BlurEffect.RadiusProperty,
+            new DoubleAnimation(0, 14, TimeSpan.FromMilliseconds(650)));
+        LoadingContentScale.BeginAnimation(
+            ScaleTransform.ScaleXProperty,
+            new DoubleAnimation(1, 1.06, TimeSpan.FromMilliseconds(650)));
+        LoadingContentScale.BeginAnimation(
+            ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(1, 1.06, TimeSpan.FromMilliseconds(650)));
+        LoadingOverlay.BeginAnimation(OpacityProperty, fade);
+        await completion.Task;
+        LoadingOverlay.Visibility = Visibility.Collapsed;
+        LoadingOverlay.BeginAnimation(OpacityProperty, null);
+        LoadingOverlay.Opacity = 1;
+        LoadingOuterRingRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+        LoadingInnerRingRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+        LoadingProgressSheenTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        LoadingDotOne.BeginAnimation(OpacityProperty, null);
+        LoadingDotTwo.BeginAnimation(OpacityProperty, null);
+        LoadingDotThree.BeginAnimation(OpacityProperty, null);
+    }
+
+    private void StartAmbientAnimations()
+    {
+        var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+        AmbientGlowOneTransform.BeginAnimation(
+            TranslateTransform.XProperty,
+            new DoubleAnimation(-18, 32, TimeSpan.FromSeconds(13))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = ease
+            });
+        AmbientGlowOneTransform.BeginAnimation(
+            TranslateTransform.YProperty,
+            new DoubleAnimation(-8, 38, TimeSpan.FromSeconds(17))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = ease
+            });
+        AmbientGlowTwoTransform.BeginAnimation(
+            TranslateTransform.XProperty,
+            new DoubleAnimation(20, -35, TimeSpan.FromSeconds(16))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = ease
+            });
+        AmbientGlowTwoTransform.BeginAnimation(
+            TranslateTransform.YProperty,
+            new DoubleAnimation(12, -30, TimeSpan.FromSeconds(12))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = ease
+            });
+        AmbientGridTransform.BeginAnimation(
+            TranslateTransform.XProperty,
+            new DoubleAnimation(0, 32, TimeSpan.FromSeconds(18))
+            {
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = null
+            });
+        AmbientGridTransform.BeginAnimation(
+            TranslateTransform.YProperty,
+            new DoubleAnimation(0, 32, TimeSpan.FromSeconds(24))
+            {
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = null
+            });
+    }
+
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        PrepareLoadingExperience();
         _earnings = await _storageService.LoadAsync();
         var savedCaptureSettings = await _captureSettingsService.LoadAsync();
         _uiPreferences = await _uiPreferencesService.LoadAsync();
@@ -210,11 +420,13 @@ public partial class MainWindow : Window
                 : "Dashboard",
             saveSelection: false);
         ApplyWindowMode(_captureSettings.IsCompactMode);
+        RefreshCalendar();
         UpdateCaptureAreaDisplay();
         RefreshTotals();
         UpdateDashboardStatus();
         RegisterConfiguredHotkey();
         _refreshTimer.Start();
+        _countdownTimer.Start();
         _isLoaded = true;
         _ = InitializePaddleOcrStatusAsync();
         AutomaticDetectionCheckBox.IsChecked = false;
@@ -234,6 +446,9 @@ public partial class MainWindow : Window
                 () => GetSelectedScrollViewer().ScrollToTop(),
                 DispatcherPriority.ContextIdle);
         }
+
+        StartAmbientAnimations();
+        await CompleteLoadingExperienceAsync();
     }
 
     private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -283,6 +498,7 @@ public partial class MainWindow : Window
         _isClosing = true;
         RememberCurrentWindowPosition();
         _refreshTimer.Stop();
+        _countdownTimer.Stop();
         _livePreviewTimer.Stop();
         _quickCaptureNotificationTimer.Stop();
         _settingsSaveTimer.Stop();
@@ -314,6 +530,13 @@ public partial class MainWindow : Window
             _globalHotkeyService.HotkeyPressed -= GlobalHotkeyService_HotkeyPressed;
             _globalHotkeyService.Dispose();
             _globalHotkeyService = null;
+        }
+
+        if (_minimizeHotkeyService is not null)
+        {
+            _minimizeHotkeyService.HotkeyPressed -= MinimizeHotkeyService_HotkeyPressed;
+            _minimizeHotkeyService.Dispose();
+            _minimizeHotkeyService = null;
         }
 
         if (_trayIconService is not null)
@@ -442,7 +665,10 @@ public partial class MainWindow : Window
         {
             await _captureSettingsService.SaveAsync(_captureSettings);
             CaptureStatusText.Text = "Capture area selected.";
-            SetupPreviewImage.Source = _screenCaptureService.Capture(_captureSettings);
+            var preview = _screenCaptureService.Capture(_captureSettings);
+            SetupPreviewImage.Source = preview;
+            SettingsCapturePreviewImage.Source = preview;
+            SettingsCapturePreviewPlaceholder.Visibility = Visibility.Collapsed;
             SetupPreviewBorder.Visibility = Visibility.Visible;
             SetupStatusText.Text = "Capture area ready";
             await Task.Delay(450);
@@ -498,6 +724,8 @@ public partial class MainWindow : Window
         _captureSettings.CaptureAreaConfirmed = false;
         CapturePreviewImage.Source = null;
         CapturePreviewPlaceholderText.Visibility = Visibility.Visible;
+        SettingsCapturePreviewImage.Source = null;
+        SettingsCapturePreviewPlaceholder.Visibility = Visibility.Visible;
         UpdateCaptureAreaDisplay();
 
         try
@@ -676,16 +904,25 @@ public partial class MainWindow : Window
                 shouldRestoreWindow = false;
             }
 
-            SetQuickScanState("Reading heading…", "ANALYZING…");
-            var selectedResult = await Task.Run(
-                () => _largeDigitReaderService.Analyze(
-                    frames,
-                    _captureSettings.DetectionMode,
-                    cancellationToken,
-                    forceTargetedVerification: true),
+            SetQuickScanState("Finding payout…", "ANALYZING…");
+            var greenIconAnalysis = await Task.Run(
+                () => _greenCashPayoutDetectionService.Analyze(frames, cancellationToken),
                 cancellationToken);
+            var selectedResult = greenIconAnalysis is not null
+                ? new BurstPayoutAnalysisResult(
+                    greenIconAnalysis,
+                    frames[0],
+                    frames.Count,
+                    greenIconAnalysis.GtaResultDiagnostics?.StableFrameCount ?? 1)
+                : await Task.Run(
+                    () => _largeDigitReaderService.Analyze(
+                        frames,
+                        _captureSettings.DetectionMode,
+                        cancellationToken,
+                        forceTargetedVerification: true),
+                    cancellationToken);
 
-            if (selectedResult.NeedsTargetedFallback)
+            if (greenIconAnalysis is null && selectedResult.NeedsTargetedFallback)
             {
                 SetQuickScanState("Verifying digits…", "ANALYZING…");
                 if (hideForCapture)
@@ -861,15 +1098,15 @@ public partial class MainWindow : Window
             _duplicateGuard.RecordNoCandidate(analysis.ImageFingerprint);
             var anchorMissing = analysis.GtaResultDiagnostics?.AnchorFound != true;
             var message = anchorMissing
-                ? "TOTAL CASH EARNED was not found in the selected area."
-                : "No payout amount was found below TOTAL CASH EARNED.";
+                ? "No supported payout was found. Include either TOTAL CASH EARNED or the green cash icon and full amount."
+                : "A payout marker was found, but its complete amount could not be read reliably.";
             SetQuickScanState("No result found", "QUICK SCAN");
             QuickCaptureStatusText.Text = message;
             OcrStatusText.Text = message;
             DiagnosticStatusText.Text = "Scan status: Quick Capture found no anchored payout";
             ShowQuickCaptureStatusNotification(message);
             ShowCompactScanMessage(
-                "No payout found\nMake sure the selected area includes both “TOTAL CASH EARNED” and the full amount.");
+                "No payout found\nInclude the full heading or green cash icon together with the complete amount.");
             return;
         }
 
@@ -892,7 +1129,9 @@ public partial class MainWindow : Window
         if (!IsTotalCashEarnedDetection(candidate.DetectionMethod))
         {
             PresentPayoutCandidate(candidate, "Quick Capture");
-            QuickCaptureStatusText.Text = "A plus-sign payout needs confirmation.";
+            QuickCaptureStatusText.Text = candidate.DetectionMethod == PayoutDetectionMethod.GreenCashIconPayout
+                ? "A green-icon cash payout needs confirmation."
+                : "A plus-sign payout needs confirmation.";
             ShowQuickCaptureStatusNotification("Payout needs confirmation.");
             return;
         }
@@ -1379,10 +1618,13 @@ public partial class MainWindow : Window
         _pendingDetectedPayout = candidate;
         _pendingPayoutSource = source;
         var isTotalCashEarned = IsTotalCashEarnedDetection(candidate.DetectionMethod);
-        ConfirmationHeadingText.Text = isTotalCashEarned
-            ? "PAYOUT FOUND — VERIFY BEFORE SAVING"
-            : "PAYOUT REQUIRES CONFIRMATION";
-        DetectedPayoutText.Text = isTotalCashEarned
+        var isGreenCashIcon = candidate.DetectionMethod == PayoutDetectionMethod.GreenCashIconPayout;
+        ConfirmationHeadingText.Text = isGreenCashIcon
+            ? "GREEN CASH PAYOUT — VERIFY BEFORE SAVING"
+            : isTotalCashEarned
+                ? "PAYOUT FOUND — VERIFY BEFORE SAVING"
+                : "PAYOUT REQUIRES CONFIRMATION";
+        DetectedPayoutText.Text = isTotalCashEarned || isGreenCashIcon
             ? $"Amount: {FormatMoney(candidate.Amount)}"
             : $"Detected payout: {FormatMoney(candidate.Amount)}";
         RecognizedPayoutText.Text = $"Recognized text: {candidate.OriginalOcrText}";
@@ -1798,14 +2040,14 @@ public partial class MainWindow : Window
         }
 
         var nowUtc = DateTime.UtcNow;
-        var last24Hours = _earnings
-            .Where(record => record.TimestampUtc >= nowUtc.AddHours(-24) &&
-                record.TimestampUtc <= nowUtc)
-            .Sum(record => record.Amount);
-        var last7Days = _earnings
-            .Where(record => record.TimestampUtc >= nowUtc.AddDays(-7) &&
-                record.TimestampUtc <= nowUtc)
-            .Sum(record => record.Amount);
+        var last24Hours = _earningsSessionService.GetCurrentSession(
+            _earnings,
+            TimeSpan.FromHours(24),
+            nowUtc).Total;
+        var last7Days = _earningsSessionService.GetCurrentSession(
+            _earnings,
+            TimeSpan.FromDays(7),
+            nowUtc).Total;
         var notification = new DiscordPayoutNotification(
             _discordSettings.Username,
             savedRecord.Amount,
@@ -1912,7 +2154,7 @@ public partial class MainWindow : Window
         CompactQuickCaptureButton.IsEnabled = canScan;
         if (!isProcessing)
         {
-            QuickCaptureButton.Content = "QUICK SCAN";
+            QuickCaptureButton.Content = "SCAN PAYOUT";
             CompactQuickCaptureButton.Content = "QUICK SCAN";
         }
     }
@@ -2035,23 +2277,27 @@ public partial class MainWindow : Window
     private void RefreshTotals()
     {
         var nowUtc = DateTime.UtcNow;
-        var dayCutoffUtc = nowUtc.AddHours(-24);
-        var weekCutoffUtc = nowUtc.AddDays(-7);
         var latestRecord = _earnings.MaxBy(record => record.TimestampUtc);
         var lastPayout = latestRecord?.Amount ?? 0;
-        var dayTotal = _earnings
-            .Where(record => record.TimestampUtc >= dayCutoffUtc && record.TimestampUtc <= nowUtc)
-            .Sum(record => record.Amount);
-        var weekTotal = _earnings
-            .Where(record => record.TimestampUtc >= weekCutoffUtc && record.TimestampUtc <= nowUtc)
-            .Sum(record => record.Amount);
+        var displayName = string.IsNullOrWhiteSpace(_discordSettings.Username)
+            ? "Player"
+            : _discordSettings.Username.Trim();
+        var greeting = DateTime.Now.Hour < 12
+            ? "Good morning"
+            : DateTime.Now.Hour < 18
+                ? "Good afternoon"
+                : "Good evening";
+
+        DashboardGreetingPrefixText.Text = $"{greeting},";
+        DashboardGreetingNameText.Text = $" {displayName}";
+        UsernameTipBorder.Visibility = string.IsNullOrWhiteSpace(_discordSettings.Username)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        DashboardDateText.Text =
+            $"{DateTime.Now:dddd, MMMM d}  •  Your ledger is ready for the next score.";
 
         LastPayoutText.Text = FormatMoney(lastPayout);
         HeroLastPayoutText.Text = FormatMoney(lastPayout);
-        DayTotalText.Text = FormatMoney(dayTotal);
-        WeekTotalText.Text = FormatMoney(weekTotal);
-        CompactDayTotalText.Text = FormatMoney(dayTotal);
-        CompactWeekTotalText.Text = FormatMoney(weekTotal);
         CompactLastPayoutText.Text = FormatMoney(lastPayout);
         LastPayoutTimestampText.Text = latestRecord is null
             ? "No transactions yet"
@@ -2059,8 +2305,74 @@ public partial class MainWindow : Window
         LastUpdatedText.Text = $"Last updated: {DateTime.Now.ToString("h:mm tt", CultureInfo.CurrentCulture)}";
         UndoLastButton.IsEnabled = _earnings.Count > 0 && AddEarningButton.IsEnabled;
         RecentUndoButton.IsEnabled = _earnings.Count > 0 && AddEarningButton.IsEnabled;
+        RefreshSessionDisplays(nowUtc);
         RefreshWeeklyChart();
+        RefreshCalendar();
         RefreshRecentActivity();
+    }
+
+    private void PreviewSettingsCaptureButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!HasConfirmedCaptureArea())
+        {
+            SettingsCapturePreviewImage.Source = null;
+            SettingsCapturePreviewPlaceholder.Visibility = Visibility.Visible;
+            CaptureStatusText.Text = "No capture area selected.";
+            return;
+        }
+
+        try
+        {
+            SettingsCapturePreviewImage.Source = _screenCaptureService.Capture(_captureSettings);
+            SettingsCapturePreviewPlaceholder.Visibility = Visibility.Collapsed;
+            CaptureStatusText.Text = "Capture preview refreshed.";
+        }
+        catch (Exception)
+        {
+            CaptureStatusText.Text = "Capture preview failed.";
+        }
+    }
+
+    private void RefreshSessionDisplays(DateTime nowUtc)
+    {
+        var daySession = _earningsSessionService.GetCurrentSession(
+            _earnings,
+            TimeSpan.FromHours(24),
+            nowUtc);
+        var weekSession = _earningsSessionService.GetCurrentSession(
+            _earnings,
+            TimeSpan.FromDays(7),
+            nowUtc);
+
+        DayTotalText.Text = FormatMoney(daySession.Total);
+        WeekTotalText.Text = FormatMoney(weekSession.Total);
+        CompactDayTotalText.Text = FormatMoney(daySession.Total);
+        CompactWeekTotalText.Text = FormatMoney(weekSession.Total);
+        DayCountdownText.Text = FormatSessionCountdown(daySession, nowUtc, includeDays: false);
+        WeekCountdownText.Text = FormatSessionCountdown(weekSession, nowUtc, includeDays: true);
+        CompactDayCountdownText.Text = FormatSessionCountdown(daySession, nowUtc, includeDays: false);
+        CompactWeekCountdownText.Text = FormatSessionCountdown(weekSession, nowUtc, includeDays: true);
+    }
+
+    private static string FormatSessionCountdown(
+        EarningsSession session,
+        DateTime nowUtc,
+        bool includeDays)
+    {
+        if (!session.IsActive || session.EndUtc is null)
+        {
+            return "Starts with your next payout";
+        }
+
+        var remaining = session.EndUtc.Value - nowUtc;
+        if (remaining < TimeSpan.Zero)
+        {
+            remaining = TimeSpan.Zero;
+        }
+
+        return includeDays
+            ? $"Resets in {remaining.Days}d {remaining.Hours:00}h {remaining.Minutes:00}m"
+            : $"Resets in {(int)remaining.TotalHours:00}:{remaining.Minutes:00}:{remaining.Seconds:00}";
     }
 
     private void UpdateAmountPlaceholder()
@@ -2080,7 +2392,7 @@ public partial class MainWindow : Window
 
     private void RefreshWeeklyChart()
     {
-        var firstDay = DateTime.Today.AddDays(-6);
+        var firstDay = _selectedHistoryWeekStart;
         var dailyTotals = Enumerable.Range(0, 7)
             .Select(offset =>
             {
@@ -2106,23 +2418,173 @@ public partial class MainWindow : Window
                 barHeight,
                 item.Total <= 0 ? 0.18 : 0.62 + (index * 0.055));
         }).ToList();
+
+        var lastDay = firstDay.AddDays(6);
+        SelectedWeekText.Text = firstDay.Year == lastDay.Year
+            ? $"{firstDay:MMM d} – {lastDay:MMM d, yyyy}"
+            : $"{firstDay:MMM d, yyyy} – {lastDay:MMM d, yyyy}";
+        NextWeekButton.IsEnabled = _selectedHistoryWeekStart < StartOfWeek(DateTime.Today);
     }
 
     private void RefreshRecentActivity()
     {
         var recentItems = _earnings
+            .Where(record => record.TimestampUtc.ToLocalTime().Date == _selectedHistoryDate.Date)
             .OrderByDescending(record => record.TimestampUtc)
-            .Take(5)
             .Select(record => new RecentEarningItem(
+                record.Id,
                 string.IsNullOrWhiteSpace(record.Source) ? "Earning" : record.Source,
                 FormatMoney(record.Amount),
                 FormatLocalTimestamp(record.TimestampUtc)))
             .ToList();
 
         RecentActivityItems.ItemsSource = recentItems;
+        SelectedHistoryDateText.Text = _selectedHistoryDate == DateTime.Today
+            ? "Today"
+            : _selectedHistoryDate.ToString("dddd, MMMM d", CultureInfo.CurrentCulture);
+        HistoryDayTotalText.Text = FormatMoney(recentItems.Count == 0
+            ? 0
+            : _earnings
+                .Where(record => record.TimestampUtc.ToLocalTime().Date == _selectedHistoryDate.Date)
+                .Sum(record => record.Amount));
         NoRecentActivityText.Visibility = recentItems.Count == 0
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    private static DateTime StartOfWeek(DateTime date)
+    {
+        var difference = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
+        return date.Date.AddDays(-difference);
+    }
+
+    private void PreviousWeekButton_Click(object sender, RoutedEventArgs e)
+    {
+        _selectedHistoryWeekStart = _selectedHistoryWeekStart.AddDays(-7);
+        RefreshWeeklyChart();
+    }
+
+    private void NextWeekButton_Click(object sender, RoutedEventArgs e)
+    {
+        var currentWeek = StartOfWeek(DateTime.Today);
+        if (_selectedHistoryWeekStart < currentWeek)
+        {
+            _selectedHistoryWeekStart = _selectedHistoryWeekStart.AddDays(7);
+            RefreshWeeklyChart();
+        }
+    }
+
+    private void RefreshCalendar()
+    {
+        var firstOfMonth = new DateTime(
+            _displayedHistoryMonth.Year,
+            _displayedHistoryMonth.Month,
+            1);
+        var firstVisibleDay = firstOfMonth.AddDays(-(int)firstOfMonth.DayOfWeek);
+        var earningDates = _earnings
+            .Select(record => record.TimestampUtc.ToLocalTime().Date)
+            .ToHashSet();
+
+        CalendarMonthText.Text = firstOfMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        CalendarDayItems.ItemsSource = Enumerable.Range(0, 42)
+            .Select(offset =>
+            {
+                var date = firstVisibleDay.AddDays(offset);
+                return new CalendarDayItem(
+                    date,
+                    date.Day.ToString(CultureInfo.CurrentCulture),
+                    date.Month == firstOfMonth.Month,
+                    date == DateTime.Today,
+                    date == _selectedHistoryDate,
+                    earningDates.Contains(date),
+                    date <= DateTime.Today);
+            })
+            .ToList();
+        NextCalendarMonthButton.IsEnabled = firstOfMonth <
+            new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    }
+
+    private void PreviousCalendarMonthButton_Click(object sender, RoutedEventArgs e)
+    {
+        _displayedHistoryMonth = _displayedHistoryMonth.AddMonths(-1);
+        RefreshCalendar();
+    }
+
+    private void NextCalendarMonthButton_Click(object sender, RoutedEventArgs e)
+    {
+        var currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        if (_displayedHistoryMonth < currentMonth)
+        {
+            _displayedHistoryMonth = _displayedHistoryMonth.AddMonths(1);
+            RefreshCalendar();
+        }
+    }
+
+    private void CalendarDayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: DateTime selectedDate } ||
+            selectedDate.Date > DateTime.Today)
+        {
+            return;
+        }
+
+        _selectedHistoryDate = selectedDate.Date;
+        _displayedHistoryMonth = new DateTime(selectedDate.Year, selectedDate.Month, 1);
+        RefreshCalendar();
+        RefreshRecentActivity();
+    }
+
+    private void PreviousHistoryDayButton_Click(object sender, RoutedEventArgs e)
+    {
+        _selectedHistoryDate = _selectedHistoryDate.AddDays(-1);
+        _displayedHistoryMonth = new DateTime(
+            _selectedHistoryDate.Year,
+            _selectedHistoryDate.Month,
+            1);
+        RefreshCalendar();
+        RefreshRecentActivity();
+    }
+
+    private void NextHistoryDayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedHistoryDate < DateTime.Today)
+        {
+            _selectedHistoryDate = _selectedHistoryDate.AddDays(1);
+            _displayedHistoryMonth = new DateTime(
+                _selectedHistoryDate.Year,
+                _selectedHistoryDate.Month,
+                1);
+            RefreshCalendar();
+            RefreshRecentActivity();
+        }
+    }
+
+    private async void DeleteRecentEarningButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: Guid recordId })
+        {
+            return;
+        }
+
+        var record = _earnings.FirstOrDefault(item => item.Id == recordId);
+        if (record is null)
+        {
+            return;
+        }
+
+        var response = System.Windows.MessageBox.Show(
+            $"Delete {FormatMoney(record.Amount)} from {FormatLocalTimestamp(record.TimestampUtc)}?",
+            "Delete earning",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (response != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        await UndoEarningRecordAsync(
+            record,
+            "That earning could not be deleted because the local data file could not be saved.");
     }
 
     private void UpdateDashboardStatus()
@@ -2297,10 +2759,23 @@ public partial class MainWindow : Window
             CurrentHotkeyText.Text = string.IsNullOrWhiteSpace(_captureSettings.HotkeyDisplayText)
                 ? "Ctrl + Shift + H"
                 : _captureSettings.HotkeyDisplayText;
+            QuickScanHotkeyHintText.Text = _captureSettings.HotkeyEnabled
+                ? $"Shortcut: {CurrentHotkeyText.Text}"
+                : "Shortcut disabled in Settings";
             _proposedHotkeyModifiers = (GlobalHotkeyModifiers)_captureSettings.HotkeyModifiers;
             _proposedHotkeyVirtualKey = (uint)_captureSettings.HotkeyVirtualKey;
             _proposedHotkeyText = CurrentHotkeyText.Text;
             ProposedHotkeyText.Text = string.Empty;
+            MinimizeHotkeyEnabledCheckBox.IsChecked = _captureSettings.MinimizeHotkeyEnabled;
+            CurrentMinimizeHotkeyText.Text = string.IsNullOrWhiteSpace(_captureSettings.MinimizeHotkeyDisplayText)
+                ? "Ctrl + Shift + M"
+                : _captureSettings.MinimizeHotkeyDisplayText;
+            _proposedMinimizeHotkeyModifiers =
+                (GlobalHotkeyModifiers)_captureSettings.MinimizeHotkeyModifiers;
+            _proposedMinimizeHotkeyVirtualKey =
+                (uint)_captureSettings.MinimizeHotkeyVirtualKey;
+            _proposedMinimizeHotkeyText = CurrentMinimizeHotkeyText.Text;
+            ProposedMinimizeHotkeyText.Text = string.Empty;
             AlwaysOnTopSettingCheckBox.IsChecked = _captureSettings.AlwaysOnTop;
             RememberWindowPositionCheckBox.IsChecked = _captureSettings.RememberWindowPosition;
             StartCompactSettingCheckBox.IsChecked = _captureSettings.IsCompactMode;
@@ -2319,7 +2794,7 @@ public partial class MainWindow : Window
                     item.Tag?.ToString(),
                     _uiPreferences.Theme,
                     StringComparison.OrdinalIgnoreCase)) ?? ThemeComboBox.Items[0];
-            DiscordUsernameTextBox.Text = _discordSettings.Username;
+            ProfileUsernameTextBox.Text = _discordSettings.Username;
             DiscordWebhookPasswordBox.Password = _discordWebhookUrl;
             DiscordEnabledCheckBox.IsChecked = _discordSettings.Enabled;
             DiscordIncludeScreenshotCheckBox.IsChecked =
@@ -2391,9 +2866,10 @@ public partial class MainWindow : Window
 
     private void RegisterConfiguredHotkey()
     {
-        if (_globalHotkeyService is null)
+        if (_globalHotkeyService is null || _minimizeHotkeyService is null)
         {
             HotkeyRegistrationStatusText.Text = "Registration status: Window handle unavailable";
+            MinimizeHotkeyRegistrationStatusText.Text = "Registration status: Window handle unavailable";
             return;
         }
 
@@ -2401,10 +2877,8 @@ public partial class MainWindow : Window
         {
             _globalHotkeyService.Disable();
             HotkeyRegistrationStatusText.Text = "Registration status: Disabled";
-            return;
         }
-
-        if (_globalHotkeyService.TryRegister(
+        else if (_globalHotkeyService.TryRegister(
                 (GlobalHotkeyModifiers)_captureSettings.HotkeyModifiers,
                 (uint)_captureSettings.HotkeyVirtualKey,
                 out _))
@@ -2417,22 +2891,62 @@ public partial class MainWindow : Window
             HotkeyRegistrationStatusText.Text =
                 "That shortcut is already being used by another application.";
         }
+
+        if (!_captureSettings.MinimizeHotkeyEnabled)
+        {
+            _minimizeHotkeyService.Disable();
+            MinimizeHotkeyRegistrationStatusText.Text = "Registration status: Disabled";
+        }
+        else if (_minimizeHotkeyService.TryRegister(
+                     (GlobalHotkeyModifiers)_captureSettings.MinimizeHotkeyModifiers,
+                     (uint)_captureSettings.MinimizeHotkeyVirtualKey,
+                     out _))
+        {
+            MinimizeHotkeyRegistrationStatusText.Text =
+                $"Registration status: Active ({_captureSettings.MinimizeHotkeyDisplayText})";
+        }
+        else
+        {
+            MinimizeHotkeyRegistrationStatusText.Text =
+                "That shortcut is already being used by another application.";
+        }
     }
 
-    private void GlobalHotkeyService_HotkeyPressed(object? sender, EventArgs e)
+    private async void GlobalHotkeyService_HotkeyPressed(object? sender, EventArgs e)
     {
         if (_isSelectingCaptureArea || _isClosing)
         {
             return;
         }
 
-        if (IsVisible)
+        if (!HasConfirmedCaptureArea())
         {
-            HideMainWindowForScanner();
+            ShowExistingMainWindow();
+            ShowCaptureSetupState();
+            ShowQuickCaptureStatusNotification("Select a payout area before using the Quick Scan shortcut.");
             return;
         }
 
-        ShowExistingMainWindow();
+        if (_pendingDetectedPayout is not null)
+        {
+            ShowExistingMainWindow();
+            return;
+        }
+
+        var shouldShowResult = !IsVisible || WindowState == WindowState.Minimized;
+        await RunQuickCaptureAsync(_shutdownCancellation.Token, ScanRequestMode.Normal);
+        if (shouldShowResult && !_isClosing)
+        {
+            ShowExistingMainWindow();
+        }
+    }
+
+    private void MinimizeHotkeyService_HotkeyPressed(object? sender, EventArgs e)
+    {
+        if (!_isClosing && IsVisible)
+        {
+            WindowState = WindowState.Minimized;
+        }
     }
 
     private void HideMainWindowForScanner()
@@ -2512,6 +3026,7 @@ public partial class MainWindow : Window
 
     private void RecordHotkeyButton_Click(object sender, RoutedEventArgs e)
     {
+        _hotkeyRecordingTarget = HotkeyRecordingTarget.QuickScan;
         _isRecordingHotkey = true;
         ProposedHotkeyText.Text = "Press your new shortcut…";
         HotkeyWarningText.Visibility = Visibility.Collapsed;
@@ -2519,8 +3034,24 @@ public partial class MainWindow : Window
         RecordHotkeyButton.Focus();
     }
 
+    private void RecordMinimizeHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        _hotkeyRecordingTarget = HotkeyRecordingTarget.Minimize;
+        _isRecordingHotkey = true;
+        ProposedMinimizeHotkeyText.Text = "Press your new shortcut…";
+        MinimizeHotkeyWarningText.Visibility = Visibility.Collapsed;
+        MinimizeHotkeyRegistrationStatusText.Text = "Press your new shortcut…";
+        RecordMinimizeHotkeyButton.Focus();
+    }
+
     private void RecordProposedHotkey(KeyEventArgs e)
     {
+        if (_hotkeyRecordingTarget == HotkeyRecordingTarget.Minimize)
+        {
+            RecordProposedMinimizeHotkey(e);
+            return;
+        }
+
         e.Handled = true;
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key == Key.Escape)
@@ -2560,6 +3091,50 @@ public partial class MainWindow : Window
         ShowSingleKeyWarning(modifiers == GlobalHotkeyModifiers.None);
     }
 
+    private void RecordProposedMinimizeHotkey(KeyEventArgs e)
+    {
+        e.Handled = true;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.Escape)
+        {
+            _isRecordingHotkey = false;
+            ProposedMinimizeHotkeyText.Text = string.Empty;
+            MinimizeHotkeyRegistrationStatusText.Text = "Shortcut recording cancelled.";
+            return;
+        }
+
+        if (IsModifierKey(key))
+        {
+            ProposedMinimizeHotkeyText.Text = "Press a non-modifier key…";
+            return;
+        }
+
+        if (key is Key.Enter or Key.Tab or Key.F12 || key == Key.None)
+        {
+            MinimizeHotkeyRegistrationStatusText.Text =
+                "That key cannot be used as a global shortcut.";
+            return;
+        }
+
+        var modifiers = ConvertModifiers(Keyboard.Modifiers);
+        var virtualKey = (uint)KeyInterop.VirtualKeyFromKey(key);
+        if (virtualKey == 0)
+        {
+            MinimizeHotkeyRegistrationStatusText.Text =
+                "That key could not be converted to a Windows shortcut.";
+            return;
+        }
+
+        _proposedMinimizeHotkeyModifiers = modifiers;
+        _proposedMinimizeHotkeyVirtualKey = virtualKey;
+        _proposedMinimizeHotkeyText = FormatHotkey(modifiers, key);
+        _isRecordingHotkey = false;
+        ProposedMinimizeHotkeyText.Text = $"Proposed: {_proposedMinimizeHotkeyText}";
+        MinimizeHotkeyRegistrationStatusText.Text =
+            "Shortcut recorded. Select Apply Minimize Shortcut to register it.";
+        ShowMinimizeKeyWarning(modifiers == GlobalHotkeyModifiers.None);
+    }
+
     private void ResetHotkeyButton_Click(object sender, RoutedEventArgs e)
     {
         _isRecordingHotkey = false;
@@ -2569,6 +3144,19 @@ public partial class MainWindow : Window
         ProposedHotkeyText.Text = "Proposed: Ctrl + Shift + H";
         HotkeyRegistrationStatusText.Text = "Default shortcut selected. Select Apply Shortcut to register it.";
         ShowSingleKeyWarning(show: false);
+    }
+
+    private void ResetMinimizeHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isRecordingHotkey = false;
+        _proposedMinimizeHotkeyModifiers =
+            GlobalHotkeyModifiers.Control | GlobalHotkeyModifiers.Shift;
+        _proposedMinimizeHotkeyVirtualKey = 0x4D;
+        _proposedMinimizeHotkeyText = "Ctrl + Shift + M";
+        ProposedMinimizeHotkeyText.Text = "Proposed: Ctrl + Shift + M";
+        MinimizeHotkeyRegistrationStatusText.Text =
+            "Default selected. Select Apply Minimize Shortcut to register it.";
+        ShowMinimizeKeyWarning(show: false);
     }
 
     private async void ApplyHotkeyButton_Click(object sender, RoutedEventArgs e)
@@ -2584,8 +3172,21 @@ public partial class MainWindow : Window
         {
             _globalHotkeyService.Disable();
             _captureSettings.HotkeyEnabled = false;
+            QuickScanHotkeyHintText.Text = "Shortcut disabled in Settings";
             HotkeyRegistrationStatusText.Text = "Registration status: Disabled";
             await SaveSettingsQuietlyAsync();
+            return;
+        }
+
+        if (_captureSettings.MinimizeHotkeyEnabled &&
+            HotkeysMatch(
+                _proposedHotkeyModifiers,
+                _proposedHotkeyVirtualKey,
+                (GlobalHotkeyModifiers)_captureSettings.MinimizeHotkeyModifiers,
+                (uint)_captureSettings.MinimizeHotkeyVirtualKey))
+        {
+            HotkeyRegistrationStatusText.Text =
+                "Quick Scan and minimize must use different shortcuts.";
             return;
         }
 
@@ -2609,10 +3210,68 @@ public partial class MainWindow : Window
         _captureSettings.HotkeyVirtualKey = (int)_proposedHotkeyVirtualKey;
         _captureSettings.HotkeyDisplayText = _proposedHotkeyText;
         CurrentHotkeyText.Text = _proposedHotkeyText;
+        QuickScanHotkeyHintText.Text = $"Shortcut: {_proposedHotkeyText}";
         ProposedHotkeyText.Text = string.Empty;
         HotkeyRegistrationStatusText.Text = $"Registration status: Active ({_proposedHotkeyText})";
         await SaveSettingsQuietlyAsync();
     }
+
+    private async void ApplyMinimizeHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_minimizeHotkeyService is null)
+        {
+            MinimizeHotkeyRegistrationStatusText.Text =
+                "The window is not ready to register a shortcut.";
+            return;
+        }
+
+        if (MinimizeHotkeyEnabledCheckBox.IsChecked != true)
+        {
+            _minimizeHotkeyService.Disable();
+            _captureSettings.MinimizeHotkeyEnabled = false;
+            MinimizeHotkeyRegistrationStatusText.Text = "Registration status: Disabled";
+            await SaveSettingsQuietlyAsync();
+            return;
+        }
+
+        if (_captureSettings.HotkeyEnabled &&
+            HotkeysMatch(
+                _proposedMinimizeHotkeyModifiers,
+                _proposedMinimizeHotkeyVirtualKey,
+                (GlobalHotkeyModifiers)_captureSettings.HotkeyModifiers,
+                (uint)_captureSettings.HotkeyVirtualKey))
+        {
+            MinimizeHotkeyRegistrationStatusText.Text =
+                "Quick Scan and minimize must use different shortcuts.";
+            return;
+        }
+
+        if (!_minimizeHotkeyService.TryRegister(
+                _proposedMinimizeHotkeyModifiers,
+                _proposedMinimizeHotkeyVirtualKey,
+                out _))
+        {
+            MinimizeHotkeyRegistrationStatusText.Text =
+                "That shortcut is already being used by another application.";
+            return;
+        }
+
+        _captureSettings.MinimizeHotkeyEnabled = true;
+        _captureSettings.MinimizeHotkeyModifiers = (int)_proposedMinimizeHotkeyModifiers;
+        _captureSettings.MinimizeHotkeyVirtualKey = (int)_proposedMinimizeHotkeyVirtualKey;
+        _captureSettings.MinimizeHotkeyDisplayText = _proposedMinimizeHotkeyText;
+        CurrentMinimizeHotkeyText.Text = _proposedMinimizeHotkeyText;
+        ProposedMinimizeHotkeyText.Text = string.Empty;
+        MinimizeHotkeyRegistrationStatusText.Text =
+            $"Registration status: Active ({_proposedMinimizeHotkeyText})";
+        await SaveSettingsQuietlyAsync();
+    }
+
+    private static bool HotkeysMatch(
+        GlobalHotkeyModifiers firstModifiers,
+        uint firstKey,
+        GlobalHotkeyModifiers secondModifiers,
+        uint secondKey) => firstModifiers == secondModifiers && firstKey == secondKey;
 
     private async void WindowSettingCheckBox_Click(object sender, RoutedEventArgs e)
     {
@@ -2728,6 +3387,33 @@ public partial class MainWindow : Window
         await SaveDiscordConfigurationFromUiAsync(requireConfigured: false);
     }
 
+    private async void SaveProfileButton_Click(object sender, RoutedEventArgs e)
+    {
+        var username = ProfileUsernameTextBox.Text.Trim();
+        if (username.Contains('\r') || username.Contains('\n'))
+        {
+            ProfileStatusText.Foreground = GetThemeBrush("ErrorRedBrush");
+            ProfileStatusText.Text = "Player name must be a single line.";
+            return;
+        }
+
+        try
+        {
+            _discordSettings.Username = username;
+            await _discordSettingsService.SaveAsync(_discordSettings);
+            RefreshTotals();
+            ProfileStatusText.Foreground = GetThemeBrush("EarningsGreenBrush");
+            ProfileStatusText.Text = string.IsNullOrWhiteSpace(username)
+                ? "Saved. Greetings will use Player."
+                : $"Saved. Welcome, {username}!";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ProfileStatusText.Foreground = GetThemeBrush("ErrorRedBrush");
+            ProfileStatusText.Text = "The player name could not be saved locally.";
+        }
+    }
+
     private async void TestDiscordWebhookButton_Click(object sender, RoutedEventArgs e)
     {
         if (!await SaveDiscordConfigurationFromUiAsync(requireConfigured: true))
@@ -2753,12 +3439,11 @@ public partial class MainWindow : Window
 
     private async Task<bool> SaveDiscordConfigurationFromUiAsync(bool requireConfigured)
     {
-        var username = DiscordUsernameTextBox.Text.Trim();
+        var username = ProfileUsernameTextBox.Text.Trim();
         var webhookUrl = DiscordWebhookPasswordBox.Password.Trim();
         var enabled = DiscordEnabledCheckBox.IsChecked == true;
         var isEmptyDisabledConfiguration = !requireConfigured &&
             !enabled &&
-            string.IsNullOrWhiteSpace(username) &&
             string.IsNullOrWhiteSpace(webhookUrl);
 
         if (!isEmptyDisabledConfiguration)
@@ -2766,14 +3451,14 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(username))
             {
                 SetDiscordStatus("Add a username before configuring the Discord webhook.", false);
-                DiscordUsernameTextBox.Focus();
+                ProfileUsernameTextBox.Focus();
                 return false;
             }
 
             if (username.Contains('\r') || username.Contains('\n'))
             {
                 SetDiscordStatus("The Discord username must be a single line.", false);
-                DiscordUsernameTextBox.Focus();
+                ProfileUsernameTextBox.Focus();
                 return false;
             }
 
@@ -2825,7 +3510,7 @@ public partial class MainWindow : Window
 
     private void SetDiscordControlsEnabled(bool enabled)
     {
-        DiscordUsernameTextBox.IsEnabled = enabled;
+        ProfileUsernameTextBox.IsEnabled = enabled;
         DiscordWebhookPasswordBox.IsEnabled = enabled;
         DiscordEnabledCheckBox.IsEnabled = enabled;
         DiscordIncludeScreenshotCheckBox.IsEnabled = enabled;
@@ -3020,6 +3705,16 @@ public partial class MainWindow : Window
         HotkeyWarningText.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         HotkeyWarningText.Text = show
             ? "This shortcut may interfere with the game or other applications. A shortcut containing Ctrl, Alt, or Shift is recommended."
+            : string.Empty;
+    }
+
+    private void ShowMinimizeKeyWarning(bool show)
+    {
+        MinimizeHotkeyWarningText.Visibility = show
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        MinimizeHotkeyWarningText.Text = show
+            ? "A shortcut containing Ctrl, Alt, or Shift is recommended."
             : string.Empty;
     }
 
@@ -3322,6 +4017,7 @@ public partial class MainWindow : Window
         {
             PayoutDetectionMethod.TotalCashEarned => "Total Cash Earned",
             PayoutDetectionMethod.GtaTotalCashEarnedResultScreen => "GTA Total Cash Earned result screen",
+            PayoutDetectionMethod.GreenCashIconPayout => "Green cash icon payout",
             _ => "Plus-sign payout"
         };
     }
