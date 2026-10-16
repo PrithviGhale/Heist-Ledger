@@ -1,10 +1,11 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using GTAEarningsTracker.Models;
 using FormsScreen = System.Windows.Forms.Screen;
+using Point = System.Windows.Point;
 
 namespace GTAEarningsTracker.Services;
 
@@ -27,6 +28,20 @@ public sealed class ScreenCaptureService
     private const int SmCyVirtualScreen = 79;
     private const int SrcCopy = 0x00CC0020;
     private const int CaptureBlt = 0x40000000;
+
+    public static CaptureSettings CreateEnclosingPixelBounds(Point start, Point end, CaptureSettings screen)
+    {
+        if (!double.IsFinite(start.X) || !double.IsFinite(start.Y) ||
+            !double.IsFinite(end.X) || !double.IsFinite(end.Y) || screen.Width <= 0 || screen.Height <= 0)
+            throw new ArgumentOutOfRangeException(nameof(start), "Screen selection coordinates must be finite.");
+        var screenRight = (double)screen.X + screen.Width;
+        var screenBottom = (double)screen.Y + screen.Height;
+        var left = checked((int)Math.Floor(Math.Clamp(Math.Min(start.X, end.X), screen.X, screenRight)));
+        var top = checked((int)Math.Floor(Math.Clamp(Math.Min(start.Y, end.Y), screen.Y, screenBottom)));
+        var right = checked((int)Math.Ceiling(Math.Clamp(Math.Max(start.X, end.X), screen.X, screenRight)));
+        var bottom = checked((int)Math.Ceiling(Math.Clamp(Math.Max(start.Y, end.Y), screen.Y, screenBottom)));
+        return new CaptureSettings { X = left, Y = top, Width = checked(right - left), Height = checked(bottom - top) };
+    }
 
     public CaptureSettings GetPrimaryScreenBounds()
     {
@@ -107,85 +122,127 @@ public sealed class ScreenCaptureService
         CaptureSettings settings,
         IReadOnlyList<Int32Rect>? excludedScreenRectangles = null)
     {
+        using var session = OpenSession(settings);
+        var frame = session.CaptureFrame();
+        return excludedScreenRectangles is { Count: > 0 }
+            ? BlackOutRegions(frame, settings, excludedScreenRectangles)
+            : frame;
+    }
+
+    public CaptureSession OpenSession(CaptureSettings settings)
+    {
         if (!IsValidCaptureArea(settings))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(settings),
-                "The capture area must be at least 100 by 40 pixels and remain inside the primary screen.");
+                "The capture area must be at least 100 by 40 pixels and remain inside the connected screen bounds.");
         }
 
-        var screenDc = GetDC(IntPtr.Zero);
-        if (screenDc == IntPtr.Zero)
+        return new CaptureSession(settings);
+    }
+
+    // A session owns one top-down DIB for the entire burst. Each returned WPF
+    // bitmap copies its pixels, so subsequent frames cannot mutate the preview.
+    // Create, use, and dispose the session on the same capture worker thread.
+    public sealed class CaptureSession : IDisposable
+    {
+        private readonly int _ownerThreadId = Environment.CurrentManagedThreadId;
+        private readonly int _x;
+        private readonly int _y;
+        private readonly int _width;
+        private readonly int _height;
+        private readonly int _stride;
+        private readonly int _bufferSize;
+        private IntPtr _screenDc;
+        private IntPtr _memoryDc;
+        private IntPtr _bitmap;
+        private IntPtr _previousObject;
+        private IntPtr _pixels;
+        private bool _disposed;
+
+        internal CaptureSession(CaptureSettings settings)
         {
-            throw CreateCaptureException("Unable to access the screen device context.");
+            _x = settings.X;
+            _y = settings.Y;
+            _width = settings.Width;
+            _height = settings.Height;
+            _stride = checked(_width * 4);
+            _bufferSize = checked(_stride * _height);
+            try
+            {
+                _screenDc = GetDC(IntPtr.Zero);
+                if (_screenDc == IntPtr.Zero) throw CreateCaptureException("Unable to access the screen device context.");
+                _memoryDc = CreateCompatibleDC(_screenDc);
+                if (_memoryDc == IntPtr.Zero) throw CreateCaptureException("Unable to create the capture device context.");
+                var info = new BitmapInfo
+                {
+                    Size = (uint)Marshal.SizeOf<BitmapInfo>(),
+                    Width = _width,
+                    Height = -_height,
+                    Planes = 1,
+                    BitCount = 32,
+                    SizeImage = (uint)_bufferSize
+                };
+                _bitmap = CreateDIBSection(_screenDc, ref info, 0, out _pixels, IntPtr.Zero, 0);
+                if (_bitmap == IntPtr.Zero || _pixels == IntPtr.Zero) throw CreateCaptureException("Unable to create the capture bitmap.");
+                _previousObject = SelectObject(_memoryDc, _bitmap);
+                if (_previousObject == IntPtr.Zero || _previousObject == new IntPtr(-1))
+                    throw CreateCaptureException("Unable to prepare the capture bitmap.");
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
         }
 
-        IntPtr memoryDc = IntPtr.Zero;
-        IntPtr bitmap = IntPtr.Zero;
-        IntPtr previousObject = IntPtr.Zero;
-
-        try
+        public BitmapSource CaptureFrame()
         {
-            memoryDc = CreateCompatibleDC(screenDc);
-            if (memoryDc == IntPtr.Zero)
-            {
-                throw CreateCaptureException("Unable to create the capture device context.");
-            }
-
-            bitmap = CreateCompatibleBitmap(screenDc, settings.Width, settings.Height);
-            if (bitmap == IntPtr.Zero)
-            {
-                throw CreateCaptureException("Unable to create the capture bitmap.");
-            }
-
-            previousObject = SelectObject(memoryDc, bitmap);
-            if (previousObject == IntPtr.Zero || previousObject == new IntPtr(-1))
-            {
-                throw CreateCaptureException("Unable to prepare the capture bitmap.");
-            }
-
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (Environment.CurrentManagedThreadId != _ownerThreadId)
+                throw new InvalidOperationException("Use the capture session on its creating thread.");
             if (!BitBlt(
-                    memoryDc,
+                    _memoryDc,
                     0,
                     0,
-                    settings.Width,
-                    settings.Height,
-                    screenDc,
-                    settings.X,
-                    settings.Y,
+                    _width,
+                    _height,
+                    _screenDc,
+                    _x,
+                    _y,
                     SrcCopy | CaptureBlt))
             {
                 throw CreateCaptureException("Windows could not copy the selected screen pixels.");
             }
 
-            var bitmapSource = Imaging.CreateBitmapSourceFromHBitmap(
-                bitmap,
-                IntPtr.Zero,
-                Int32Rect.Empty,
-                BitmapSizeOptions.FromEmptyOptions());
-            return excludedScreenRectangles is { Count: > 0 }
-                ? BlackOutRegions(bitmapSource, settings, excludedScreenRectangles)
-                : Freeze(bitmapSource);
+            // Complete pending GDI writes before WPF copies the DIB's memory.
+            if (!GdiFlush()) throw CreateCaptureException("Windows could not finish the capture.");
+            var frame = BitmapSource.Create(_width, _height, 96, 96,
+                PixelFormats.Bgr32, null, _pixels, _bufferSize, _stride);
+            frame.Freeze();
+            return frame;
         }
-        finally
+
+        public void Dispose()
         {
-            if (previousObject != IntPtr.Zero && previousObject != new IntPtr(-1) && memoryDc != IntPtr.Zero)
+            if (_disposed) return;
+            _disposed = true;
+            if (_previousObject != IntPtr.Zero && _previousObject != new IntPtr(-1) && _memoryDc != IntPtr.Zero)
             {
-                SelectObject(memoryDc, previousObject);
+                SelectObject(_memoryDc, _previousObject);
             }
-
-            if (bitmap != IntPtr.Zero)
-            {
-                DeleteObject(bitmap);
-            }
-
-            if (memoryDc != IntPtr.Zero)
-            {
-                DeleteDC(memoryDc);
-            }
-
-            ReleaseDC(IntPtr.Zero, screenDc);
+            if (_bitmap != IntPtr.Zero) DeleteObject(_bitmap);
+            if (_memoryDc != IntPtr.Zero) DeleteDC(_memoryDc);
+            if (_screenDc != IntPtr.Zero) ReleaseDC(IntPtr.Zero, _screenDc);
+            _bitmap = _memoryDc = _screenDc = _pixels = IntPtr.Zero;
         }
+    }
+
+    public static void WaitForDesktopComposition()
+    {
+        // Wait for the desktop compositor to remove our hidden overlay before
+        // taking the first frame. This replaces an arbitrary 100 ms sleep.
+        _ = DwmFlush();
     }
 
     public BitmapSource BlackOutRegions(
@@ -250,12 +307,6 @@ public sealed class ScreenCaptureService
         };
     }
 
-    private static BitmapSource Freeze(BitmapSource source)
-    {
-        source.Freeze();
-        return source;
-    }
-
     private static Win32Exception CreateCaptureException(string message)
     {
         return new Win32Exception(Marshal.GetLastWin32Error(), message);
@@ -274,7 +325,31 @@ public sealed class ScreenCaptureService
     private static extern IntPtr CreateCompatibleDC(IntPtr deviceContext);
 
     [DllImport("gdi32.dll", SetLastError = true)]
-    private static extern IntPtr CreateCompatibleBitmap(IntPtr deviceContext, int width, int height);
+    private static extern IntPtr CreateDIBSection(IntPtr deviceContext, ref BitmapInfo info,
+        uint usage, out IntPtr pixels, IntPtr section, uint offset);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BitmapInfo
+    {
+        public uint Size;
+        public int Width;
+        public int Height;
+        public ushort Planes;
+        public ushort BitCount;
+        public uint Compression;
+        public uint SizeImage;
+        public int XPelsPerMeter;
+        public int YPelsPerMeter;
+        public uint ClrUsed;
+        public uint ClrImportant;
+    }
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GdiFlush();
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmFlush();
 
     [DllImport("gdi32.dll", SetLastError = true)]
     private static extern IntPtr SelectObject(IntPtr deviceContext, IntPtr graphicsObject);

@@ -39,7 +39,7 @@
                            Foreground="White"
                            FontSize="15"
                            FontWeight="SemiBold"
-                           Text="Select TOTAL CASH EARNED and the complete amount" />
+                           Text="Select the payout label or green cash icon and the full amount" />
                 <TextBlock HorizontalAlignment="Center"
                            Margin="0,4,0,0"
                            Foreground="#FFAAB2BF"

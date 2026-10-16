@@ -1,7 +1,7 @@
 <Window x:Class="GTAEarningsTracker.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="GTA Earnings Tracker"
+        Title="Heist Ledger"
         Icon="Assets/AppIcon.ico"
         Width="500"
         Height="760"
@@ -13,6 +13,8 @@
         ResizeMode="NoResize"
         AllowsTransparency="True"
         Background="Transparent"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         Topmost="True"
         ShowInTaskbar="True"
         SourceInitialized="Window_SourceInitialized"
@@ -22,21 +24,21 @@
         StateChanged="Window_StateChanged"
         Closed="Window_Closed"
         PreviewKeyDown="Window_PreviewKeyDown">
+    <Grid x:Name="WindowHost">
+    <Border Margin="8" CornerRadius="26" Background="{DynamicResource MainBackgroundBrush}" IsHitTestVisible="False">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.32" Color="Black" />
+        </Border.Effect>
+    </Border>
     <Border x:Name="WindowChrome"
             Margin="8"
             Background="{DynamicResource DashboardBackgroundBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
-            CornerRadius="18"
+            CornerRadius="26"
             ClipToBounds="True">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="24"
-                              ShadowDepth="5"
-                              Opacity="0.48"
-                              Color="#FF000000" />
-        </Border.Effect>
-
-        <Grid>
+        <Grid x:Name="WindowContent" SizeChanged="WindowContent_SizeChanged">
+            <Grid.Clip><RectangleGeometry x:Name="WindowContentClip" RadiusX="25" RadiusY="25" /></Grid.Clip>
             <Grid.RowDefinitions>
                 <RowDefinition Height="58" />
                 <RowDefinition Height="Auto" />
@@ -46,20 +48,19 @@
             <Border x:Name="AmbientGlowOne"
                      Grid.RowSpan="3"
                      Width="460"
-                     Height="130"
-                     Margin="-170,90,0,0"
+                     Height="460"
+                     Margin="-230,-120,0,0"
                      HorizontalAlignment="Left"
                      VerticalAlignment="Top"
                      IsHitTestVisible="False"
-                     Opacity="0.11"
-                     CornerRadius="48"
+                     Opacity="0.10"
+                     CornerRadius="230"
                      RenderTransformOrigin="0.5,0.5">
                 <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-                        <GradientStop Color="Transparent" Offset="0" />
-                        <GradientStop Color="{DynamicResource EarningsGreenColor}" Offset="0.52" />
-                        <GradientStop Color="Transparent" Offset="1" />
-                    </LinearGradientBrush>
+                    <RadialGradientBrush>
+                        <GradientStop Color="{DynamicResource EarningsGreenColor}" Offset="0" />
+                        <GradientStop Color="#00000000" Offset="1" />
+                    </RadialGradientBrush>
                 </Border.Background>
                 <Border.RenderTransform>
                     <TransformGroup>
@@ -71,20 +72,19 @@
             <Border x:Name="AmbientGlowTwo"
                      Grid.RowSpan="3"
                      Width="430"
-                     Height="110"
-                     Margin="0,0,-165,145"
+                     Height="430"
+                     Margin="0,0,-230,-160"
                      HorizontalAlignment="Right"
                      VerticalAlignment="Bottom"
                      IsHitTestVisible="False"
                      Opacity="0.075"
-                     CornerRadius="42"
+                     CornerRadius="215"
                      RenderTransformOrigin="0.5,0.5">
                 <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-                        <GradientStop Color="Transparent" Offset="0" />
-                        <GradientStop Color="{DynamicResource ScannerCyanColor}" Offset="0.55" />
-                        <GradientStop Color="Transparent" Offset="1" />
-                    </LinearGradientBrush>
+                    <RadialGradientBrush>
+                        <GradientStop Color="{DynamicResource ScannerCyanColor}" Offset="0" />
+                        <GradientStop Color="#00000000" Offset="1" />
+                    </RadialGradientBrush>
                 </Border.Background>
                 <Border.RenderTransform>
                     <TransformGroup>
@@ -93,7 +93,7 @@
                     </TransformGroup>
                 </Border.RenderTransform>
             </Border>
-            <Border Grid.RowSpan="3" IsHitTestVisible="False" Opacity="0.055">
+            <Border Grid.RowSpan="3" IsHitTestVisible="False" Opacity="0.018">
                 <Border.Background>
                     <DrawingBrush TileMode="Tile" Viewport="0,0,32,32" ViewportUnits="Absolute">
                         <DrawingBrush.Drawing>
@@ -192,11 +192,21 @@
                     BorderBrush="{DynamicResource MutedBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="11">
-                <Grid>
+                <Grid x:Name="NavigationTrack" SizeChanged="NavigationTrack_SizeChanged">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
+                    <Border x:Name="NavigationBubble" Grid.ColumnSpan="2" HorizontalAlignment="Left"
+                            Background="{DynamicResource AccentSurfaceBrush}" BorderBrush="{DynamicResource AccentBorderBrush}"
+                            BorderThickness="1" CornerRadius="10" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform x:Name="NavigationBubbleScale" />
+                                <TranslateTransform x:Name="NavigationBubbleTranslate" />
+                            </TransformGroup>
+                        </Border.RenderTransform>
+                    </Border>
                     <Button x:Name="DashboardTabButton"
                             Style="{DynamicResource NavigationTabButtonActive}"
                             Content="DASHBOARD"
@@ -209,7 +219,7 @@
                 </Grid>
             </Border>
 
-            <Grid x:Name="ExpandedDashboard" Grid.Row="2" RenderTransformOrigin="0.5,0.5">
+            <Grid x:Name="ExpandedDashboard" Grid.Row="2" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
                 <Grid.RenderTransform>
                     <TranslateTransform X="0" />
                 </Grid.RenderTransform>
@@ -227,32 +237,34 @@
                                 Background="{DynamicResource HeroCardBrush}"
                                 BorderBrush="{DynamicResource AccentBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="16">
+                                CornerRadius="20">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <StackPanel Orientation="Horizontal">
+                                    <TextBlock Margin="0,0,0,8" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource MutedTextBrush}" Text="YOUR PERSONAL HEIST LEDGER" />
+                                    <WrapPanel>
                                         <TextBlock x:Name="DashboardGreetingPrefixText"
                                                    Foreground="{DynamicResource ScannerCyanBrush}"
                                                    FontFamily="Segoe Script, Brush Script MT"
-                                                   FontSize="18"
+                                                   FontSize="20"
                                                    FontWeight="Bold"
                                                    Text="Welcome, " />
                                         <TextBlock x:Name="DashboardGreetingNameText"
                                                    Margin="4,0,0,0"
                                                    Foreground="{DynamicResource EarningsGreenBrush}"
                                                    FontFamily="Segoe Script, Brush Script MT"
-                                                   FontSize="18"
+                                                   FontSize="20"
                                                    FontWeight="Bold"
                                                    Text="Player" />
-                                    </StackPanel>
+                                    </WrapPanel>
                                     <TextBlock x:Name="DashboardDateText"
                                                Margin="0,4,0,0"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="10"
+                                               TextWrapping="Wrap"
                                                Text="Your heist ledger is ready." />
                                     <Border x:Name="UsernameTipBorder"
                                             Margin="0,9,0,0"
@@ -272,7 +284,7 @@
                                         BorderBrush="{DynamicResource AccentBorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="14">
-                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource EarningsGreenBrush}" FontFamily="Impact" FontSize="18" Text="$" />
+                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource EarningsGreenBrush}" FontFamily="Segoe UI Variable Display, Segoe UI" FontWeight="Bold" FontSize="17" Text="HL" />
                                 </Border>
                             </Grid>
                         </Border>
@@ -348,7 +360,7 @@
                                     <ColumnDefinition Width="1.35*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="PAYOUT COMMAND" />
+                                    <TextBlock Style="{DynamicResource MicroLabel}" Text="QUICK CAPTURE" />
                                     <TextBlock x:Name="QuickCaptureStatusText"
                                                Margin="0,4,0,0"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
@@ -358,7 +370,7 @@
                                 </StackPanel>
                                 <Button x:Name="QuickCaptureButton"
                                         Grid.Column="2"
-                                        Height="44"
+                                        Height="48"
                                         Style="{DynamicResource PrimaryButton}"
                                         Content="SCAN PAYOUT"
                                         Click="QuickCaptureButton_Click" />
@@ -378,7 +390,7 @@
                                 Background="{DynamicResource HeroCardBrush}"
                                 BorderBrush="{DynamicResource AccentBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="15">
+                                CornerRadius="20">
                             <StackPanel>
                                 <TextBlock Style="{DynamicResource MicroLabel}" Text="LAST 24 HOURS" />
                                 <TextBlock x:Name="DayTotalText"
@@ -1818,42 +1830,37 @@
                         <GradientStop Color="#FF030508" Offset="1" />
                     </RadialGradientBrush>
                 </Grid.Background>
-                <Ellipse Width="360" Height="360" Margin="-190,-190,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="{DynamicResource EarningsGreenBrush}" Opacity="0.12">
-                    <Ellipse.Effect><BlurEffect Radius="95" /></Ellipse.Effect>
-                </Ellipse>
-                <Ellipse Width="330" Height="330" Margin="0,0,-175,-155" HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="{DynamicResource ScannerCyanBrush}" Opacity="0.10">
-                    <Ellipse.Effect><BlurEffect Radius="90" /></Ellipse.Effect>
-                </Ellipse>
-                <Grid x:Name="LoadingContent" Width="370" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                    <Grid.Effect>
-                        <BlurEffect x:Name="LoadingContentBlur" Radius="0" />
-                    </Grid.Effect>
+                <Border Width="320" Height="900" Background="{DynamicResource AccentSurfaceBrush}" Opacity="0.35" HorizontalAlignment="Right" RenderTransformOrigin="0.5,0.5">
+                    <Border.RenderTransform><RotateTransform Angle="24" /></Border.RenderTransform>
+                </Border>
+                <Viewbox Margin="32" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid x:Name="LoadingContent" Width="360" RenderTransformOrigin="0.5,0.5">
                     <Grid.RenderTransform>
-                        <ScaleTransform x:Name="LoadingContentScale" ScaleX="1" ScaleY="1" />
+                        <TransformGroup>
+                            <ScaleTransform x:Name="LoadingContentScale" ScaleX="1" ScaleY="1" />
+                            <TranslateTransform x:Name="LoadingContentTranslate" />
+                        </TransformGroup>
                     </Grid.RenderTransform>
                     <StackPanel>
-                        <Grid Width="138" Height="138" HorizontalAlignment="Center">
-                            <Ellipse Stroke="{DynamicResource EarningsGreenBrush}" StrokeThickness="2" StrokeDashArray="3,5" Opacity="0.72" RenderTransformOrigin="0.5,0.5">
-                                <Ellipse.RenderTransform><RotateTransform x:Name="LoadingOuterRingRotation" /></Ellipse.RenderTransform>
-                            </Ellipse>
-                            <Ellipse Margin="12" Stroke="{DynamicResource ScannerCyanBrush}" StrokeThickness="1.5" StrokeDashArray="1,7" Opacity="0.75" RenderTransformOrigin="0.5,0.5">
-                                <Ellipse.RenderTransform><RotateTransform x:Name="LoadingInnerRingRotation" /></Ellipse.RenderTransform>
-                            </Ellipse>
-                            <Ellipse Margin="25" Fill="{DynamicResource AccentSurfaceBrush}" Stroke="{DynamicResource AccentBorderBrush}" StrokeThickness="1" />
-                            <Image Width="68" Height="68" HorizontalAlignment="Center" VerticalAlignment="Center" Source="Assets/AppIcon.png" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                        <Grid x:Name="LoadingEmblem" Width="96" Height="96" HorizontalAlignment="Left" RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform><TranslateTransform /></Grid.RenderTransform>
+                            <Border Margin="5" CornerRadius="22" BorderBrush="{DynamicResource ScannerCyanBrush}" BorderThickness="1" Opacity="0.4" RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform><RotateTransform Angle="-12" /></Border.RenderTransform>
+                            </Border>
+                            <Border Margin="5" CornerRadius="22" Background="{DynamicResource ElevatedCardBrush}" BorderBrush="{DynamicResource AccentBorderBrush}" BorderThickness="1">
+                                <Image Margin="10" Source="Assets/AppIcon.png" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                            </Border>
                         </Grid>
-                        <TextBlock Margin="0,16,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" FontWeight="SemiBold" Text="HEIST LEDGER • SECURE LOCAL SESSION" />
-                        <StackPanel Margin="0,13,0,0" HorizontalAlignment="Center" Orientation="Horizontal">
-                            <TextBlock x:Name="GreetingPrefixText" Foreground="{DynamicResource ScannerCyanBrush}" FontFamily="Segoe Script, Brush Script MT" FontSize="28" FontWeight="Bold" Text="Welcome, " />
-                            <TextBlock x:Name="GreetingNameText" Margin="5,0,0,0" Foreground="{DynamicResource EarningsGreenBrush}" FontFamily="Segoe Script, Brush Script MT" FontSize="28" FontWeight="Bold" Text="Player" />
+                        <TextBlock x:Name="LoadingWordmark" Margin="5,22,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" FontWeight="SemiBold" Text="H E I S T   L E D G E R">
+                            <TextBlock.RenderTransform><TranslateTransform /></TextBlock.RenderTransform>
+                        </TextBlock>
+                        <StackPanel x:Name="LoadingGreeting" Margin="0,24,0,0">
+                            <StackPanel.RenderTransform><TranslateTransform /></StackPanel.RenderTransform>
+                            <TextBlock x:Name="GreetingPrefixText" Foreground="{DynamicResource ScannerCyanBrush}" FontFamily="Segoe Script, Brush Script MT" FontSize="29" Text="Welcome," />
+                            <TextBlock x:Name="GreetingNameText" Margin="2,2,0,0" MaxWidth="350" TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" Foreground="{DynamicResource EarningsGreenBrush}" FontFamily="Segoe UI Variable Display, Segoe UI" FontSize="42" FontWeight="SemiBold" Text="Player" />
                         </StackPanel>
-                        <TextBlock x:Name="LoadingStatusText" Margin="0,8,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" Text="Preparing your next score…" />
-                        <StackPanel Margin="0,11,0,0" HorizontalAlignment="Center" Orientation="Horizontal">
-                            <Ellipse x:Name="LoadingDotOne" Width="5" Height="5" Fill="{DynamicResource EarningsGreenBrush}" />
-                            <Ellipse x:Name="LoadingDotTwo" Width="5" Height="5" Margin="7,0,0,0" Fill="{DynamicResource EarningsGreenBrush}" />
-                            <Ellipse x:Name="LoadingDotThree" Width="5" Height="5" Margin="7,0,0,0" Fill="{DynamicResource EarningsGreenBrush}" />
-                        </StackPanel>
-                        <Border Height="4" Margin="48,22" Background="{DynamicResource SecondaryBackgroundBrush}" BorderBrush="{DynamicResource MutedBorderBrush}" BorderThickness="1" CornerRadius="2" ClipToBounds="True">
+                        <TextBlock x:Name="LoadingStatusText" Margin="5,22,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" Text="Preparing your next score…" />
+                        <Border Height="3" Width="350" Margin="5,15,5,8" Background="{DynamicResource SecondaryBackgroundBrush}" CornerRadius="2" ClipToBounds="True">
                             <Grid>
                                 <Border x:Name="LoadingProgressBar" Width="0" HorizontalAlignment="Left" Background="{DynamicResource EarningsGreenBrush}" CornerRadius="2" />
                                 <Border Width="70" HorizontalAlignment="Left" Opacity="0.55">
@@ -1870,7 +1877,10 @@
                         </Border>
                     </StackPanel>
                 </Grid>
+                </Viewbox>
             </Grid>
         </Grid>
     </Border>
+    <Image x:Name="ModeTransitionPreview" Stretch="Fill" Visibility="Collapsed" IsHitTestVisible="False" RenderOptions.BitmapScalingMode="LowQuality" />
+    </Grid>
 </Window>

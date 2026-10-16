@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security.Cryptography;
 using Tesseract;
 
 namespace GTAEarningsTracker.Services;
@@ -48,6 +49,11 @@ public sealed class OcrService : IDisposable
     private readonly OcrWorkerKind _workerKind;
     private TesseractEngine? _engine;
     private bool _disposed;
+    private const int RecognitionCacheCapacity = 64;
+    private readonly Dictionary<string, OcrRecognitionResult> _recognitionCache = new(StringComparer.Ordinal);
+    private readonly Queue<string> _recognitionCacheOrder = new();
+
+    public int RecognitionCacheHits { get; private set; }
 
     public OcrService(OcrWorkerKind workerKind = OcrWorkerKind.General)
     {
@@ -137,6 +143,16 @@ public sealed class OcrService : IDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
             cancellationToken.ThrowIfCancellationRequested();
 
+            // Cache only an exact PNG plus the complete recognition configuration.
+            // Fresh frames with even one changed pixel still run through OCR. No
+            // image bytes or screen coordinates are retained in this bounded cache.
+            var cacheKey = $"{pageSegMode}:{includeTextLines}:{whitelist}:{Convert.ToHexString(SHA256.HashData(image.PngBytes))}";
+            if (_recognitionCache.TryGetValue(cacheKey, out var cached))
+            {
+                RecognitionCacheHits++;
+                return cached with { PreprocessingMethod = image.Method };
+            }
+
             var engine = GetOrCreateEngine();
             engine.SetVariable("tessedit_char_whitelist", whitelist);
             try
@@ -151,12 +167,19 @@ public sealed class OcrService : IDisposable
                 var text = page.GetText()?.Trim() ?? string.Empty;
                 var lines = includeTextLines ? ReadTextLines(page) : null;
                 var symbols = includeTextLines ? ReadSymbols(page) : null;
-                return new OcrRecognitionResult(
+                var result = new OcrRecognitionResult(
                     text,
                     page.GetMeanConfidence(),
                     image.Method,
                     lines,
                     symbols);
+                if (_recognitionCache.Count >= RecognitionCacheCapacity)
+                {
+                    _recognitionCache.Remove(_recognitionCacheOrder.Dequeue());
+                }
+                _recognitionCache.Add(cacheKey, result);
+                _recognitionCacheOrder.Enqueue(cacheKey);
+                return result;
             }
             finally
             {
@@ -249,6 +272,8 @@ public sealed class OcrService : IDisposable
             _disposed = true;
             _engine?.Dispose();
             _engine = null;
+            _recognitionCache.Clear();
+            _recognitionCacheOrder.Clear();
         }
     }
 

@@ -19,10 +19,25 @@ dotnet build src\HeistLedger\GTAEarningsTracker.csproj -c Release --no-restore
 dotnet run --project Tests\GeneratedQuickCaptureTests\GeneratedQuickCaptureTests.csproj -c Release
 dotnet run --project Tests\PaddleOcrRegressionTests\PaddleOcrRegressionTests.csproj -c Release
 dotnet run --project Tests\EarningsSessionTests\EarningsSessionTests.csproj -c Release
+dotnet run --project Tests\PerformanceRegressionTests\PerformanceRegressionTests.csproj -c Release
 dotnet run --project Tests\DiscordWebhookSmokeTests\DiscordWebhookSmokeTests.csproj -c Release
 ```
 
 The screenshot fixtures under `Tests/Fixtures` are regression inputs. They are not copied into the published application.
+
+For offscreen layout checks across all themes at 100%, 125%, and 150% rendering scale:
+
+```powershell
+dotnet run --project Tests\PerformanceRegressionTests\PerformanceRegressionTests.csproj -c Release -- --layout
+```
+
+For native capture correctness and GDI resource checks, run on an unlocked Windows desktop. This displays and captures only the test's own colored window:
+
+```powershell
+dotnet run --project Tests\PerformanceRegressionTests\PerformanceRegressionTests.csproj -c Release -- --capture
+```
+
+The layout checks write generated preview PNGs to `artifacts/performance-update/layout`. Neither test loads the user's earnings or settings.
 
 ## Publish Windows x64
 
