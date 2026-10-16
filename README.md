@@ -4,9 +4,11 @@ Heist Ledger is a standalone Windows companion for tracking GTA Online earnings.
 
 ## Download
 
-Download the latest Windows build from the [GitHub Releases page](https://github.com/PrithviGhale/Heist-Ledger/releases/latest). Extract the ZIP and run `HeistLedger.exe`.
+Download `HeistLedger-win-Setup.exe` from the [GitHub Releases page](https://github.com/PrithviGhale/Heist-Ledger/releases/latest), close any older copy, and run Setup. Launch Heist Ledger using its installed shortcut.
 
-The Windows x64 package is self-contained, so users do not need to install .NET separately. OCR requires the Microsoft Visual C++ 2015-2022 x64 Redistributable. Version 1.3.0 is not Authenticode-signed, so Windows SmartScreen may identify it as an unrecognized app; the release includes a SHA-256 checksum for verification.
+The Windows x64 package is self-contained, so users do not need to install .NET separately. OCR requires the Microsoft Visual C++ 2015-2022 x64 Redistributable. Releases are not Authenticode-signed, so Windows SmartScreen may identify the app as unrecognized; published releases include a SHA-256 checksum for verification.
+
+Version 1.4.0 and later enable **Settings > App Updates**. Existing ZIP users need to run the updater-enabled Setup once. Future installed updates can be checked and downloaded inside the app. See [update instructions](docs/UPDATES.md).
 
 User earnings and settings are stored under `%LocalAppData%\GTAEarningsTracker`. Updating the application does not remove that data.
 
@@ -23,6 +25,7 @@ User earnings and settings are stored under `%LocalAppData%\GTAEarningsTracker`.
 - Repeated rescanning and saving of the same visible payout without duplicate suppression
 - Compact always-on-top overlay and six visual themes
 - Smooth compact/expanded transitions, sliding pages, and a moving navigation highlight
+- Built-in update checking, release notes, cancellable downloads, and explicit install/restart in updater-enabled installations
 - Lower idle CPU usage and faster capture bursts with reusable native capture resources
 - Persistent session countdowns, earning calendar, and per-entry history deletion
 - Separate configurable Quick Scan and minimize global shortcuts
