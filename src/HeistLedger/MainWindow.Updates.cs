@@ -59,7 +59,7 @@ public partial class MainWindow
             DownloadAppUpdateButton.Visibility = update is null ? Visibility.Collapsed : Visibility.Visible;
             AppUpdateNotesExpander.Visibility = update is null ? Visibility.Collapsed : Visibility.Visible;
             if (update is null)
-                AppUpdateStatusText.Text = "You're up to date. Checked " + DateTime.Now.ToString("t") + ".";
+                AppUpdateStatusText.Text = $"You're up to date (v{AppUpdateService.CurrentVersion}). Checked " + DateTime.Now.ToString("t") + ".";
             else
             {
                 AppUpdateStatusText.Text = $"Version {update.Version} is available. Download it when you're ready.";
