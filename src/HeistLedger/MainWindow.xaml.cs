@@ -83,6 +83,15 @@ public partial class MainWindow : Window
     private bool _isSelectingCaptureArea;
     private bool _isModeTransitioning;
     private bool _isTabTransitioning;
+    private string _requestedTab = "Dashboard";
+    private bool _quickScanInProgress;
+    private bool _previewCaptureInProgress;
+    private bool _sessionsDirty = true;
+    private EarningsSession _daySession = new(0, null, null);
+    private EarningsSession _weekSession = new(0, null, null);
+    private DateTime _sessionsCalculatedAtUtc;
+    private int _resizeVersion;
+    private TaskCompletionSource? _resizeCompletion;
     private bool _resumeLivePreviewAfterShow;
     private bool _resumeScannerAfterShow;
     private bool _suppressSettingsUiEvents;
@@ -115,6 +124,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        IsVisibleChanged += (_, _) => UpdatePresentationActivity();
         UpdateAmountPlaceholder();
 
         _payoutDetectionService = new PayoutDetectionService(
@@ -142,7 +152,7 @@ public partial class MainWindow : Window
         };
         _refreshTimer.Tick += (_, _) => RefreshTotals();
 
-        _countdownTimer = new DispatcherTimer
+        _countdownTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromSeconds(1)
         };
@@ -200,78 +210,44 @@ public partial class MainWindow : Window
         GreetingNameText.Text = " Player";
         LoadingStatusText.Text = "Preparing your next score…";
         LoadingOverlay.Visibility = Visibility.Visible;
-        LoadingOverlay.Opacity = 0;
-        LoadingContent.Opacity = 0;
-        LoadingContentScale.ScaleX = 0.78;
-        LoadingContentScale.ScaleY = 0.78;
-        LoadingContentBlur.Radius = 14;
-        var entranceEase = new BackEase
+        LoadingOverlay.Opacity = 1;
+        LoadingContent.Opacity = 1;
+        LoadingContentScale.ScaleX = 1;
+        LoadingContentScale.ScaleY = 1;
+        LoadingContentTranslate.Y = 0;
+
+        // Staggered editorial reveal: emblem, wordmark, then the personal greeting.
+        // Only opacity and transforms animate; the layout remains stationary.
+        RevealIntroElement(LoadingEmblem, 0);
+        RevealIntroElement(LoadingWordmark, 100);
+        RevealIntroElement(LoadingGreeting, 230);
+        LoadingProgressBar.BeginAnimation(WidthProperty,
+            new DoubleAnimation(0, 350, TimeSpan.FromMilliseconds(
+                SystemParameters.ClientAreaAnimation ? 1850 : 1))
+            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+        if (SystemParameters.ClientAreaAnimation)
         {
-            Amplitude = 0.22,
-            EasingMode = EasingMode.EaseOut
-        };
-        LoadingOverlay.BeginAnimation(
-            OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(420)));
-        LoadingContent.BeginAnimation(
-            OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(720)));
-        LoadingContentScale.BeginAnimation(
-            ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(0.78, 1, TimeSpan.FromMilliseconds(780))
-            {
-                EasingFunction = entranceEase
-            });
-        LoadingContentScale.BeginAnimation(
-            ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(0.78, 1, TimeSpan.FromMilliseconds(780))
-            {
-                EasingFunction = entranceEase
-            });
-        LoadingContentBlur.BeginAnimation(
-            BlurEffect.RadiusProperty,
-            new DoubleAnimation(14, 0, TimeSpan.FromMilliseconds(650)));
-        LoadingOuterRingRotation.BeginAnimation(
-            RotateTransform.AngleProperty,
-            new DoubleAnimation(0, 360, TimeSpan.FromSeconds(3.4))
-            {
-                RepeatBehavior = RepeatBehavior.Forever
-            });
-        LoadingInnerRingRotation.BeginAnimation(
-            RotateTransform.AngleProperty,
-            new DoubleAnimation(360, 0, TimeSpan.FromSeconds(4.6))
-            {
-                RepeatBehavior = RepeatBehavior.Forever
-            });
-        AnimateLoadingDot(LoadingDotOne, TimeSpan.Zero);
-        AnimateLoadingDot(LoadingDotTwo, TimeSpan.FromMilliseconds(180));
-        AnimateLoadingDot(LoadingDotThree, TimeSpan.FromMilliseconds(360));
-        LoadingProgressBar.BeginAnimation(
-            WidthProperty,
-            new DoubleAnimation(0, 274, TimeSpan.FromMilliseconds(1850))
-            {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
-            });
-        LoadingProgressSheenTransform.BeginAnimation(
-            TranslateTransform.XProperty,
-            new DoubleAnimation(-90, 320, TimeSpan.FromMilliseconds(1250))
-            {
-                RepeatBehavior = RepeatBehavior.Forever,
-                BeginTime = TimeSpan.FromMilliseconds(300)
-            });
+            LoadingProgressSheenTransform.BeginAnimation(TranslateTransform.XProperty,
+                new DoubleAnimation(-90, 370, TimeSpan.FromMilliseconds(1400))
+                { RepeatBehavior = RepeatBehavior.Forever });
+        }
     }
 
-    private static void AnimateLoadingDot(UIElement dot, TimeSpan delay)
+    private static void RevealIntroElement(FrameworkElement element, int delayMilliseconds)
     {
-        dot.BeginAnimation(
-            OpacityProperty,
-            new DoubleAnimation(0.18, 1, TimeSpan.FromMilliseconds(520))
-            {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                BeginTime = delay,
-                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-            });
+        if (!SystemParameters.ClientAreaAnimation) return;
+        var delay = TimeSpan.FromMilliseconds(delayMilliseconds);
+        var duration = TimeSpan.FromMilliseconds(650);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        element.Opacity = 0;
+        var fade = new DoubleAnimation(0, 1, duration) { BeginTime = delay, EasingFunction = ease };
+        element.BeginAnimation(OpacityProperty, fade);
+        if (element.RenderTransform is TranslateTransform translation)
+        {
+            translation.Y = 22;
+            translation.BeginAnimation(TranslateTransform.YProperty,
+                new DoubleAnimation(22, 0, duration) { BeginTime = delay, EasingFunction = ease });
+        }
     }
 
     private async Task CompleteLoadingExperienceAsync()
@@ -289,84 +265,90 @@ public partial class MainWindow : Window
         GreetingNameText.Text = $" {displayName}";
         LoadingStatusText.Text = "Loaded — enjoy your session.";
         await Task.Delay(1900);
+        if (_isClosing) return;
 
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(650))
+        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(SystemParameters.ClientAreaAnimation ? 480 : 1))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
         };
         fade.Completed += (_, _) => completion.TrySetResult();
-        LoadingContentBlur.BeginAnimation(
-            BlurEffect.RadiusProperty,
-            new DoubleAnimation(0, 14, TimeSpan.FromMilliseconds(650)));
-        LoadingContentScale.BeginAnimation(
-            ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(1, 1.06, TimeSpan.FromMilliseconds(650)));
-        LoadingContentScale.BeginAnimation(
-            ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(1, 1.06, TimeSpan.FromMilliseconds(650)));
+        LoadingContentTranslate.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(0, -28, fade.Duration) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
         LoadingOverlay.BeginAnimation(OpacityProperty, fade);
         await completion.Task;
         LoadingOverlay.Visibility = Visibility.Collapsed;
         LoadingOverlay.BeginAnimation(OpacityProperty, null);
         LoadingOverlay.Opacity = 1;
-        LoadingOuterRingRotation.BeginAnimation(RotateTransform.AngleProperty, null);
-        LoadingInnerRingRotation.BeginAnimation(RotateTransform.AngleProperty, null);
         LoadingProgressSheenTransform.BeginAnimation(TranslateTransform.XProperty, null);
-        LoadingDotOne.BeginAnimation(OpacityProperty, null);
-        LoadingDotTwo.BeginAnimation(OpacityProperty, null);
-        LoadingDotThree.BeginAnimation(OpacityProperty, null);
+        LoadingProgressBar.BeginAnimation(WidthProperty, null);
+        LoadingContentTranslate.BeginAnimation(TranslateTransform.YProperty, null);
+        foreach (var element in new FrameworkElement[] { LoadingEmblem, LoadingWordmark, LoadingGreeting })
+        {
+            element.BeginAnimation(OpacityProperty, null);
+            element.Opacity = 1;
+            if (element.RenderTransform is TranslateTransform translation)
+            {
+                translation.BeginAnimation(TranslateTransform.YProperty, null);
+                translation.Y = 0;
+            }
+        }
     }
 
     private void StartAmbientAnimations()
     {
-        var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
-        AmbientGlowOneTransform.BeginAnimation(
-            TranslateTransform.XProperty,
-            new DoubleAnimation(-18, 32, TimeSpan.FromSeconds(13))
+        StopAmbientAnimations();
+        if (_isClosing || _isCompactMode || !IsVisible || WindowState == WindowState.Minimized ||
+            _quickScanInProgress || !SystemParameters.ClientAreaAnimation) return;
+
+        // A short atmospheric entrance settles to a static background. An idle
+        // overlay must not redraw the entire layered window sixty times a second.
+        var drift = new DoubleAnimation(0, 14, TimeSpan.FromSeconds(2.5))
+        {
+            AutoReverse = true,
+            FillBehavior = FillBehavior.Stop,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+        Timeline.SetDesiredFrameRate(drift, 20);
+        AmbientGlowOneTransform.BeginAnimation(TranslateTransform.YProperty, drift);
+        AmbientGlowTwoTransform.BeginAnimation(TranslateTransform.XProperty, drift);
+    }
+
+    private void StopAmbientAnimations()
+    {
+        AmbientGlowOneTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        AmbientGlowOneTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        AmbientGlowTwoTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        AmbientGlowTwoTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        AmbientGridTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        AmbientGridTransform.BeginAnimation(TranslateTransform.YProperty, null);
+    }
+
+    private void UpdatePresentationActivity()
+    {
+        if (!_isLoaded || _isClosing) return;
+        if (IsVisible && WindowState != WindowState.Minimized)
+        {
+            RefreshSessionDisplays(DateTime.UtcNow);
+            _countdownTimer.Start();
+            _refreshTimer.Start();
+            if (_resumeLivePreviewAfterShow && LivePreviewCheckBox.IsChecked == true)
             {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                EasingFunction = ease
-            });
-        AmbientGlowOneTransform.BeginAnimation(
-            TranslateTransform.YProperty,
-            new DoubleAnimation(-8, 38, TimeSpan.FromSeconds(17))
+                _resumeLivePreviewAfterShow = false;
+                _livePreviewTimer.Start();
+            }
+        }
+        else
+        {
+            _countdownTimer.Stop();
+            _refreshTimer.Stop();
+            if (_livePreviewTimer.IsEnabled)
             {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                EasingFunction = ease
-            });
-        AmbientGlowTwoTransform.BeginAnimation(
-            TranslateTransform.XProperty,
-            new DoubleAnimation(20, -35, TimeSpan.FromSeconds(16))
-            {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                EasingFunction = ease
-            });
-        AmbientGlowTwoTransform.BeginAnimation(
-            TranslateTransform.YProperty,
-            new DoubleAnimation(12, -30, TimeSpan.FromSeconds(12))
-            {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                EasingFunction = ease
-            });
-        AmbientGridTransform.BeginAnimation(
-            TranslateTransform.XProperty,
-            new DoubleAnimation(0, 32, TimeSpan.FromSeconds(18))
-            {
-                RepeatBehavior = RepeatBehavior.Forever,
-                EasingFunction = null
-            });
-        AmbientGridTransform.BeginAnimation(
-            TranslateTransform.YProperty,
-            new DoubleAnimation(0, 32, TimeSpan.FromSeconds(24))
-            {
-                RepeatBehavior = RepeatBehavior.Forever,
-                EasingFunction = null
-            });
+                _resumeLivePreviewAfterShow = true;
+                _livePreviewTimer.Stop();
+            }
+            StopAmbientAnimations();
+        }
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -496,6 +478,8 @@ public partial class MainWindow : Window
     private void Window_Closed(object? sender, EventArgs e)
     {
         _isClosing = true;
+        StopAmbientAnimations();
+        _resizeCompletion?.TrySetResult();
         RememberCurrentWindowPosition();
         _refreshTimer.Stop();
         _countdownTimer.Stop();
@@ -683,12 +667,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private void TestCaptureButton_Click(object sender, RoutedEventArgs e)
+    private async void TestCaptureButton_Click(object sender, RoutedEventArgs e)
     {
-        CaptureSelectedArea(showSuccessStatus: true);
+        await CaptureSelectedAreaAsync(showSuccessStatus: true);
     }
 
-    private void LivePreviewCheckBox_Checked(object sender, RoutedEventArgs e)
+    private async void LivePreviewCheckBox_Checked(object sender, RoutedEventArgs e)
     {
         if (!HasConfirmedCaptureArea())
         {
@@ -697,7 +681,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        CaptureSelectedArea(showSuccessStatus: true);
+        await CaptureSelectedAreaAsync(showSuccessStatus: true);
         if (HasConfirmedCaptureArea() &&
             AutomaticDetectionCheckBox.IsChecked != true)
         {
@@ -740,13 +724,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private void LivePreviewTimer_Tick(object? sender, EventArgs e)
+    private async void LivePreviewTimer_Tick(object? sender, EventArgs e)
     {
-        CaptureSelectedArea(showSuccessStatus: false);
+        if (!IsVisible || WindowState == WindowState.Minimized || _quickScanInProgress) return;
+        await CaptureSelectedAreaAsync(showSuccessStatus: false);
     }
 
-    private void CaptureSelectedArea(bool showSuccessStatus)
+    private async Task CaptureSelectedAreaAsync(bool showSuccessStatus, bool forSettings = false)
     {
+        if (_previewCaptureInProgress || _quickScanInProgress || _isClosing) return;
         if (!HasConfirmedCaptureArea())
         {
             _livePreviewTimer.Stop();
@@ -755,19 +741,40 @@ public partial class MainWindow : Window
             return;
         }
 
+        var bounds = new CaptureSettings
+        {
+            X = _captureSettings.X, Y = _captureSettings.Y,
+            Width = _captureSettings.Width, Height = _captureSettings.Height
+        };
+        _previewCaptureInProgress = true;
         try
         {
-            CapturePreviewImage.Source = _screenCaptureService.Capture(_captureSettings);
-            CapturePreviewPlaceholderText.Visibility = Visibility.Collapsed;
+            var preview = await Task.Run(() => _screenCaptureService.Capture(bounds), _shutdownCancellation.Token);
+            // A region can be cleared or reselected while this worker finishes.
+            if (_isClosing || !_captureSettings.HasCaptureArea ||
+                bounds.X != _captureSettings.X || bounds.Y != _captureSettings.Y ||
+                bounds.Width != _captureSettings.Width || bounds.Height != _captureSettings.Height) return;
+            if (forSettings)
+            {
+                SettingsCapturePreviewImage.Source = preview;
+                SettingsCapturePreviewPlaceholder.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                CapturePreviewImage.Source = preview;
+                CapturePreviewPlaceholderText.Visibility = Visibility.Collapsed;
+            }
             if (showSuccessStatus)
             {
                 CaptureStatusText.Text = "Capture successful.";
             }
         }
+        catch (OperationCanceledException) when (_isClosing) { }
         catch (Exception)
         {
-            CaptureStatusText.Text = "Capture failed.";
+            if (!_isClosing) CaptureStatusText.Text = "Capture failed.";
         }
+        finally { _previewCaptureInProgress = false; }
     }
 
     private void UpdateCaptureAreaDisplay()
@@ -832,6 +839,8 @@ public partial class MainWindow : Window
         CancellationToken cancellationToken,
         ScanRequestMode requestMode = ScanRequestMode.Normal)
     {
+        // Repeated hotkey presses must not queue multiple expensive OCR bursts.
+        if (_quickScanInProgress || _isClosing) return;
         if (!HasConfirmedCaptureArea())
         {
             ShowCaptureSetupState();
@@ -857,6 +866,8 @@ public partial class MainWindow : Window
             CompactVerificationStatusText.Text = "RESCANNING…";
         }
 
+        _quickScanInProgress = true;
+        StopAmbientAnimations();
         SetQuickCaptureProcessing(isProcessing: true);
         var enteredScan = false;
         var wasVisible = IsVisible;
@@ -891,7 +902,8 @@ public partial class MainWindow : Window
 
                 Hide();
                 shouldRestoreWindow = true;
-                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+                await Dispatcher.Yield(DispatcherPriority.Render);
+                await Task.Run(ScreenCaptureService.WaitForDesktopComposition, cancellationToken);
             }
 
             var frames = (await Task.Run(
@@ -934,7 +946,8 @@ public partial class MainWindow : Window
 
                     Hide();
                     shouldRestoreWindow = true;
-                    await Task.Delay(TimeSpan.FromMilliseconds(90), cancellationToken);
+                    await Dispatcher.Yield(DispatcherPriority.Render);
+                    await Task.Run(ScreenCaptureService.WaitForDesktopComposition, cancellationToken);
                 }
 
                 var additionalFrames = await Task.Run(
@@ -1004,6 +1017,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            _quickScanInProgress = false;
             if (shouldRestoreWindow && !_isClosing)
             {
                 ShowExistingMainWindow();
@@ -1043,13 +1057,14 @@ public partial class MainWindow : Window
         CancellationToken cancellationToken)
     {
         var frames = new List<BitmapSource>(frameCount);
+        using var captureSession = _screenCaptureService.OpenSession(bounds);
         for (var index = 0; index < frameCount; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            frames.Add(_screenCaptureService.Capture(bounds));
+            frames.Add(captureSession.CaptureFrame());
             if (index + 1 < frameCount)
             {
-                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(75));
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(50));
             }
         }
 
@@ -2276,6 +2291,7 @@ public partial class MainWindow : Window
 
     private void RefreshTotals()
     {
+        _sessionsDirty = true;
         var nowUtc = DateTime.UtcNow;
         var latestRecord = _earnings.MaxBy(record => record.TimestampUtc);
         var lastPayout = latestRecord?.Amount ?? 0;
@@ -2311,7 +2327,7 @@ public partial class MainWindow : Window
         RefreshRecentActivity();
     }
 
-    private void PreviewSettingsCaptureButton_Click(object sender, RoutedEventArgs e)
+    private async void PreviewSettingsCaptureButton_Click(object sender, RoutedEventArgs e)
     {
         if (!HasConfirmedCaptureArea())
         {
@@ -2321,28 +2337,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        try
-        {
-            SettingsCapturePreviewImage.Source = _screenCaptureService.Capture(_captureSettings);
-            SettingsCapturePreviewPlaceholder.Visibility = Visibility.Collapsed;
-            CaptureStatusText.Text = "Capture preview refreshed.";
-        }
-        catch (Exception)
-        {
-            CaptureStatusText.Text = "Capture preview failed.";
-        }
+        await CaptureSelectedAreaAsync(showSuccessStatus: true, forSettings: true);
     }
 
     private void RefreshSessionDisplays(DateTime nowUtc)
     {
-        var daySession = _earningsSessionService.GetCurrentSession(
-            _earnings,
-            TimeSpan.FromHours(24),
-            nowUtc);
-        var weekSession = _earningsSessionService.GetCurrentSession(
-            _earnings,
-            TimeSpan.FromDays(7),
-            nowUtc);
+        if (_sessionsDirty || nowUtc < _sessionsCalculatedAtUtc ||
+            _daySession.EndUtc is DateTime dayEnd && nowUtc >= dayEnd ||
+            _weekSession.EndUtc is DateTime weekEnd && nowUtc >= weekEnd)
+        {
+            _daySession = _earningsSessionService.GetCurrentSession(_earnings, TimeSpan.FromHours(24), nowUtc);
+            _weekSession = _earningsSessionService.GetCurrentSession(_earnings, TimeSpan.FromDays(7), nowUtc);
+            _sessionsCalculatedAtUtc = nowUtc;
+            _sessionsDirty = false;
+        }
+        var daySession = _daySession;
+        var weekSession = _weekSession;
 
         DayTotalText.Text = FormatMoney(daySession.Total);
         WeekTotalText.Text = FormatMoney(weekSession.Total);
@@ -2681,6 +2691,7 @@ public partial class MainWindow : Window
             _selectedTab == "Dashboard" ? "NavigationTabButtonActive" : "NavigationTabButton");
         SettingsTabButton.Style = (Style)FindResource(
             _selectedTab == "Settings" ? "NavigationTabButtonActive" : "NavigationTabButton");
+        MoveNavigationBubble(_selectedTab == "Settings", animate: false);
 
         if (saveSelection)
         {
@@ -2690,59 +2701,96 @@ public partial class MainWindow : Window
 
     private async Task SelectTabAnimatedAsync(string tabName)
     {
-        var targetTab = tabName.Equals("Settings", StringComparison.OrdinalIgnoreCase)
+        _requestedTab = tabName.Equals("Settings", StringComparison.OrdinalIgnoreCase)
             ? "Settings"
             : "Dashboard";
-        if (_isTabTransitioning || string.Equals(_selectedTab, targetTab, StringComparison.Ordinal))
-        {
-            return;
-        }
-
+        if (_isTabTransitioning || _isModeTransitioning) return;
         _isTabTransitioning = true;
-        var movingToSettings = targetTab == "Settings";
-        var outgoing = movingToSettings ? MainScrollViewer : SettingsScrollViewer;
-        var incoming = movingToSettings ? SettingsScrollViewer : MainScrollViewer;
-        var direction = movingToSettings ? 1d : -1d;
-        var outgoingTransform = (TranslateTransform)outgoing.RenderTransform;
-        var incomingTransform = (TranslateTransform)incoming.RenderTransform;
+        try
+        {
+            while (_selectedTab != _requestedTab && !_isClosing)
+            {
+                var targetTab = _requestedTab;
+                var movingToSettings = targetTab == "Settings";
+                var outgoing = movingToSettings ? MainScrollViewer : SettingsScrollViewer;
+                var incoming = movingToSettings ? SettingsScrollViewer : MainScrollViewer;
+                var direction = movingToSettings ? 1d : -1d;
+                var outgoingTransform = (TranslateTransform)outgoing.RenderTransform;
+                var incomingTransform = (TranslateTransform)incoming.RenderTransform;
 
-        incoming.Visibility = Visibility.Visible;
-        incoming.Opacity = 0;
-        incomingTransform.X = 42 * direction;
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var duration = TimeSpan.FromMilliseconds(240);
-        var incomingOpacity = new DoubleAnimation(0, 1, duration) { EasingFunction = easing };
-        incomingOpacity.Completed += (_, _) => completion.TrySetResult();
-        outgoing.BeginAnimation(
-            OpacityProperty,
-            new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(170)) { EasingFunction = easing });
-        outgoingTransform.BeginAnimation(
-            TranslateTransform.XProperty,
-            new DoubleAnimation(0, -28 * direction, TimeSpan.FromMilliseconds(190)) { EasingFunction = easing });
-        incoming.BeginAnimation(OpacityProperty, incomingOpacity);
-        incomingTransform.BeginAnimation(
-            TranslateTransform.XProperty,
-            new DoubleAnimation(42 * direction, 0, duration) { EasingFunction = easing });
-        await completion.Task;
+                incoming.Visibility = Visibility.Visible;
+                incoming.ScrollToTop();
+                // Both pages travel the same distance together, like a single horizontal strip.
+                var distance = Math.Max(1, ExpandedDashboard.ActualWidth);
+                incomingTransform.X = distance * direction;
+                ExpandedDashboard.IsHitTestVisible = false;
+                MoveNavigationBubble(movingToSettings, animate: true);
+                DashboardTabButton.Style = (Style)FindResource(movingToSettings ? "NavigationTabButton" : "NavigationTabButtonActive");
+                SettingsTabButton.Style = (Style)FindResource(movingToSettings ? "NavigationTabButtonActive" : "NavigationTabButton");
+                var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+                var duration = TimeSpan.FromMilliseconds(SystemParameters.ClientAreaAnimation ? 360 : 1);
+                var slide = new DoubleAnimation(distance * direction, 0, duration) { EasingFunction = easing };
+                slide.Completed += (_, _) => completion.TrySetResult();
+                outgoingTransform.BeginAnimation(
+                    TranslateTransform.XProperty,
+                    new DoubleAnimation(0, -distance * direction, duration) { EasingFunction = easing });
+                incomingTransform.BeginAnimation(TranslateTransform.XProperty, slide);
+                await completion.Task;
 
-        outgoing.Visibility = Visibility.Collapsed;
-        outgoing.BeginAnimation(OpacityProperty, null);
-        incoming.BeginAnimation(OpacityProperty, null);
-        outgoingTransform.BeginAnimation(TranslateTransform.XProperty, null);
-        incomingTransform.BeginAnimation(TranslateTransform.XProperty, null);
-        outgoing.Opacity = 1;
-        incoming.Opacity = 1;
-        outgoingTransform.X = 0;
-        incomingTransform.X = 0;
-        _selectedTab = targetTab;
-        _captureSettings.LastSelectedTab = targetTab;
-        DashboardTabButton.Style = (Style)FindResource(
-            targetTab == "Dashboard" ? "NavigationTabButtonActive" : "NavigationTabButton");
-        SettingsTabButton.Style = (Style)FindResource(
-            targetTab == "Settings" ? "NavigationTabButtonActive" : "NavigationTabButton");
-        incoming.ScrollToTop();
-        _isTabTransitioning = false;
+                outgoing.Visibility = Visibility.Collapsed;
+                outgoing.BeginAnimation(OpacityProperty, null);
+                incoming.BeginAnimation(OpacityProperty, null);
+                outgoingTransform.BeginAnimation(TranslateTransform.XProperty, null);
+                incomingTransform.BeginAnimation(TranslateTransform.XProperty, null);
+                outgoing.Opacity = 1;
+                incoming.Opacity = 1;
+                outgoingTransform.X = 0;
+                incomingTransform.X = 0;
+                _selectedTab = targetTab;
+                _captureSettings.LastSelectedTab = targetTab;
+                DashboardTabButton.Style = (Style)FindResource(
+                    targetTab == "Dashboard" ? "NavigationTabButtonActive" : "NavigationTabButton");
+                SettingsTabButton.Style = (Style)FindResource(
+                    targetTab == "Settings" ? "NavigationTabButtonActive" : "NavigationTabButton");
+            }
+        }
+        finally
+        {
+            ExpandedDashboard.IsHitTestVisible = true;
+            _isTabTransitioning = false;
+        }
+    }
+
+    private void NavigationTrack_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        MoveNavigationBubble(_selectedTab == "Settings", animate: false);
+    }
+
+    private void MoveNavigationBubble(bool settings, bool animate)
+    {
+        if (NavigationBubble is null) return;
+        var width = NavigationTrack.ActualWidth / 2;
+        NavigationBubble.Width = width;
+        var target = settings ? width : 0;
+        var start = NavigationBubbleTranslate.X;
+        NavigationBubbleTranslate.BeginAnimation(TranslateTransform.XProperty, null);
+        NavigationBubbleTranslate.X = target;
+        NavigationBubbleScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        NavigationBubbleScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        if (!animate || !SystemParameters.ClientAreaAnimation) return;
+        NavigationBubbleTranslate.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(start, target, TimeSpan.FromMilliseconds(360))
+            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }, FillBehavior = FillBehavior.Stop });
+        // A slight elastic stretch makes the pill feel fluid without overshooting the tabs.
+        foreach (var (property, peak) in new[] { (ScaleTransform.ScaleXProperty, 1.08), (ScaleTransform.ScaleYProperty, 0.94) })
+        {
+            var pulse = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(360), FillBehavior = FillBehavior.Stop };
+            pulse.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            pulse.KeyFrames.Add(new EasingDoubleKeyFrame(peak, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(150)), new SineEase()));
+            pulse.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(360)), new SineEase()));
+            NavigationBubbleScale.BeginAnimation(property, pulse);
+        }
     }
 
     private System.Windows.Controls.ScrollViewer GetSelectedScrollViewer()
@@ -3637,6 +3685,7 @@ public partial class MainWindow : Window
 
     private void Window_StateChanged(object? sender, EventArgs e)
     {
+        UpdatePresentationActivity();
         lock (_captureExclusionLock)
         {
             _windowVisibleForCapture = IsVisible && WindowState != WindowState.Minimized;
@@ -3793,7 +3842,7 @@ public partial class MainWindow : Window
 
     private async Task SetWindowModeAsync(bool isCompactMode)
     {
-        if (_isModeTransitioning || _isCompactMode == isCompactMode)
+        if (_isModeTransitioning || _isTabTransitioning || _isCompactMode == isCompactMode)
         {
             return;
         }
@@ -3805,49 +3854,11 @@ public partial class MainWindow : Window
         var targetHeight = isCompactMode
             ? _pendingDetectedPayout is null ? CompactNormalHeight : CompactPendingHeight
             : 760d;
-        ExpandedDashboard.Visibility = Visibility.Visible;
-        CompactDashboard.Visibility = Visibility.Visible;
-        var outgoing = isCompactMode ? ExpandedDashboard : CompactDashboard;
-        var incoming = isCompactMode ? CompactDashboard : ExpandedDashboard;
-        var direction = isCompactMode ? -1d : 1d;
-        var outgoingTransform = (TranslateTransform)outgoing.RenderTransform;
-        var incomingTransform = (TranslateTransform)incoming.RenderTransform;
-
         try
         {
-            var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-            outgoing.BeginAnimation(
-                OpacityProperty,
-                new DoubleAnimation(1, 0.35, TimeSpan.FromMilliseconds(130)) { EasingFunction = easeOut });
-            outgoingTransform.BeginAnimation(
-                TranslateTransform.XProperty,
-                new DoubleAnimation(0, 18 * direction, TimeSpan.FromMilliseconds(150)) { EasingFunction = easeOut });
-
-            await AnimateWindowSizeAsync(targetWidth, targetHeight);
-            ApplyWindowMode(isCompactMode);
-            incoming.Visibility = Visibility.Visible;
-            incoming.Opacity = 0;
-            incomingTransform.X = -24 * direction;
-            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var incomingOpacity = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(210))
-            {
-                EasingFunction = easeOut
-            };
-            incomingOpacity.Completed += (_, _) => completion.TrySetResult();
-            incoming.BeginAnimation(OpacityProperty, incomingOpacity);
-            incomingTransform.BeginAnimation(
-                TranslateTransform.XProperty,
-                new DoubleAnimation(-24 * direction, 0, TimeSpan.FromMilliseconds(230)) { EasingFunction = easeOut });
-            await completion.Task;
-
-            outgoing.BeginAnimation(OpacityProperty, null);
-            incoming.BeginAnimation(OpacityProperty, null);
-            outgoingTransform.BeginAnimation(TranslateTransform.XProperty, null);
-            incomingTransform.BeginAnimation(TranslateTransform.XProperty, null);
-            outgoing.Opacity = 1;
-            incoming.Opacity = 1;
-            outgoingTransform.X = 0;
-            incomingTransform.X = 0;
+            await AnimateWindowSizeAsync(targetWidth, targetHeight, isCompactMode);
+            if (_isClosing) return;
+            StartAmbientAnimations();
         }
         finally
         {
@@ -3873,7 +3884,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ApplyWindowMode(bool isCompactMode)
+    private void ApplyWindowMode(bool isCompactMode, bool resize = true)
     {
         _isCompactMode = isCompactMode;
         ExpandedDashboard.Visibility = isCompactMode ? Visibility.Collapsed : Visibility.Visible;
@@ -3883,6 +3894,8 @@ public partial class MainWindow : Window
         ExpandedModeTitleButton.Visibility = isCompactMode ? Visibility.Visible : Visibility.Collapsed;
         ExpandedTitleSubtitle.Visibility = isCompactMode ? Visibility.Collapsed : Visibility.Visible;
         CompactTitleScannerPanel.Visibility = isCompactMode ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!resize) return;
 
         if (isCompactMode)
         {
@@ -3917,32 +3930,77 @@ public partial class MainWindow : Window
         _ = AnimateWindowSizeAsync(width, height);
     }
 
-    private async Task AnimateWindowSizeAsync(double width, double height)
+    private async Task AnimateWindowSizeAsync(double width, double height, bool? targetCompactMode = null)
     {
+        var version = ++_resizeVersion;
+        _resizeCompletion?.TrySetResult();
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _resizeCompletion = completion;
+        // Crossfade the old snapshot DURING the resize. Keep the incoming layout
+        // at its final size and animate only its render transform, avoiding a
+        // second reveal animation and repeated layout work on every frame.
+        if (ModeTransitionPreview.Source is null && WindowChrome.IsVisible)
+        {
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var snapshot = new RenderTargetBitmap(
+                Math.Max(1, (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX)),
+                Math.Max(1, (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY)),
+                96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32);
+            snapshot.Render(WindowHost);
+            snapshot.Freeze();
+            ModeTransitionPreview.Source = snapshot;
+            ModeTransitionPreview.Visibility = Visibility.Visible;
+            ModeTransitionPreview.Opacity = 1;
+        }
+        StopAmbientAnimations();
+        var startingWidth = ActualWidth;
+        var startingHeight = ActualHeight;
+        if (targetCompactMode.HasValue) ApplyWindowMode(targetCompactMode.Value, resize: false);
+        WindowChrome.Width = Math.Max(1, width - 16);
+        WindowChrome.Height = Math.Max(1, height - 16);
+        WindowChrome.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
+        WindowChrome.VerticalAlignment = VerticalAlignment.Top;
+        WindowChrome.Visibility = Visibility.Visible;
+        WindowChrome.Opacity = 1;
+        WindowHost.IsHitTestVisible = false;
+        var scale = new ScaleTransform(
+            Math.Max(1, startingWidth - 16) / WindowChrome.Width,
+            Math.Max(1, startingHeight - 16) / WindowChrome.Height);
+        WindowChrome.RenderTransform = scale;
+        WindowChrome.CacheMode = new BitmapCache();
         MinWidth = 0;
         MinHeight = 0;
         MaxWidth = double.PositiveInfinity;
-        var easing = new QuarticEase { EasingMode = EasingMode.EaseInOut };
-        var widthAnimation = new DoubleAnimation(ActualWidth, width, TimeSpan.FromMilliseconds(340))
+        var duration = SystemParameters.ClientAreaAnimation ? 360 : 1;
+        var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+        var widthAnimation = new DoubleAnimation(startingWidth, width, TimeSpan.FromMilliseconds(duration))
         {
             EasingFunction = easing,
             FillBehavior = FillBehavior.Stop
         };
-        var heightAnimation = new DoubleAnimation(ActualHeight, height, TimeSpan.FromMilliseconds(340))
+        var heightAnimation = new DoubleAnimation(startingHeight, height, TimeSpan.FromMilliseconds(duration))
         {
             EasingFunction = easing,
             FillBehavior = FillBehavior.Stop
         };
         heightAnimation.Completed += (_, _) => completion.TrySetResult();
+        Width = width;
+        Height = height;
         BeginAnimation(WidthProperty, widthAnimation);
         BeginAnimation(HeightProperty, heightAnimation);
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty,
+            new DoubleAnimation(scale.ScaleX, 1, TimeSpan.FromMilliseconds(duration)) { EasingFunction = easing });
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(scale.ScaleY, 1, TimeSpan.FromMilliseconds(duration)) { EasingFunction = easing });
+        ModeTransitionPreview.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(duration)) { EasingFunction = easing });
         await completion.Task;
+        if (version != _resizeVersion || _isClosing) return;
         BeginAnimation(WidthProperty, null);
         BeginAnimation(HeightProperty, null);
         Width = width;
         Height = height;
-        if (_isCompactMode || Math.Abs(width - CompactWindowWidth) < 1)
+        if (_isCompactMode)
         {
             MinWidth = 400;
             MinHeight = 320;
@@ -3956,6 +4014,21 @@ public partial class MainWindow : Window
         }
 
         KeepWindowInsideWorkArea();
+        WindowChrome.RenderTransform = Transform.Identity;
+        WindowChrome.CacheMode = null;
+        WindowChrome.Width = double.NaN;
+        WindowChrome.Height = double.NaN;
+        WindowChrome.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
+        WindowChrome.VerticalAlignment = VerticalAlignment.Stretch;
+        ModeTransitionPreview.BeginAnimation(OpacityProperty, null);
+        ModeTransitionPreview.Visibility = Visibility.Collapsed;
+        ModeTransitionPreview.Source = null;
+        WindowHost.IsHitTestVisible = true;
+    }
+
+    private void WindowContent_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        WindowContentClip.Rect = new Rect(0, 0, Math.Max(0, e.NewSize.Width), Math.Max(0, e.NewSize.Height));
     }
 
     private void KeepWindowInsideWorkArea()

@@ -264,9 +264,14 @@ public sealed class PaddleOcrRecognitionService : IDisposable
                 {
                     ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
                     GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-                    IntraOpNumThreads = Math.Max(1, Environment.ProcessorCount / 2),
+                    IntraOpNumThreads = Math.Clamp(Environment.ProcessorCount / 4, 1, 2),
+                    InterOpNumThreads = 1,
                     LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR
                 };
+                // This is an on-demand companion: idle OCR workers must sleep,
+                // rather than spin and compete with the game for CPU time.
+                options.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
+                options.AddSessionConfigEntry("session.inter_op.allow_spinning", "0");
                 _session = new InferenceSession(_modelPath, options);
                 _loadError = null;
             }

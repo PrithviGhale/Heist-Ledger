@@ -96,13 +96,9 @@ public partial class CaptureSelectionWindow : Window
         var screenTopLeft = PointToScreen(new Point(left, top));
         var screenBottomRight = PointToScreen(new Point(right, bottom));
 
-        var selectedArea = new CaptureSettings
-        {
-            X = (int)Math.Round(screenTopLeft.X),
-            Y = (int)Math.Round(screenTopLeft.Y),
-            Width = (int)Math.Round(screenBottomRight.X - screenTopLeft.X),
-            Height = (int)Math.Round(screenBottomRight.Y - screenTopLeft.Y)
-        };
+        // Preserve every selected physical pixel at fractional DPI boundaries.
+        var selectedArea = ScreenCaptureService.CreateEnclosingPixelBounds(
+            screenTopLeft, screenBottomRight, _screenCaptureService.GetPrimaryScreenBounds());
 
         if (!_screenCaptureService.IsValidCaptureArea(selectedArea) ||
             selectedArea.Width < MinimumPayoutAreaWidth ||
