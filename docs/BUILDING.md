@@ -19,6 +19,8 @@ dotnet build src\HeistLedger\GTAEarningsTracker.csproj -c Release --no-restore
 dotnet run --project Tests\GeneratedQuickCaptureTests\GeneratedQuickCaptureTests.csproj -c Release
 dotnet run --project Tests\PaddleOcrRegressionTests\PaddleOcrRegressionTests.csproj -c Release
 dotnet run --project Tests\EarningsSessionTests\EarningsSessionTests.csproj -c Release
+
+dotnet run --project Tests\AppUpdateTests\AppUpdateTests.csproj -c Release
 dotnet run --project Tests\PerformanceRegressionTests\PerformanceRegressionTests.csproj -c Release
 dotnet run --project Tests\DiscordWebhookSmokeTests\DiscordWebhookSmokeTests.csproj -c Release
 ```
@@ -40,6 +42,8 @@ dotnet run --project Tests\PerformanceRegressionTests\PerformanceRegressionTests
 The layout checks write generated preview PNGs to `artifacts/performance-update/layout`. Neither test loads the user's earnings or settings.
 
 ## Publish Windows x64
+
+For the updater-enabled Setup and GitHub update feed, use [UPDATES.md](UPDATES.md) and `scripts/Build-UpdaterRelease.ps1`. The profile below remains available for standalone ZIP builds, which require the installer once before in-app updates are enabled.
 
 ```powershell
 dotnet publish src\HeistLedger\GTAEarningsTracker.csproj -p:PublishProfile=WindowsX64 -o artifacts\publish\win-x64

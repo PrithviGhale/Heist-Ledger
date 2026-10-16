@@ -232,6 +232,13 @@
                         <TranslateTransform X="0" />
                     </ScrollViewer.RenderTransform>
                     <StackPanel Margin="20,0,20,22">
+                        <Border x:Name="UpdateAvailableBanner" Visibility="Collapsed" Margin="0,2,0,12" Padding="12" CornerRadius="12"
+                                Background="{DynamicResource AccentSurfaceBrush}" BorderBrush="{DynamicResource AccentBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock x:Name="UpdateAvailableText" Foreground="{DynamicResource EarningsGreenBrush}" FontSize="12" TextWrapping="Wrap" />
+                                <Button Margin="0,8,0,0" HorizontalAlignment="Left" Style="{DynamicResource SecondaryButton}" Content="VIEW UPDATE" Click="ViewUpdateButton_Click" />
+                            </StackPanel>
+                        </Border>
                         <Border Margin="0,2,0,12"
                                 Padding="18,15"
                                 Background="{DynamicResource HeroCardBrush}"
@@ -1138,6 +1145,29 @@
                                    FontSize="11"
                                    Text="Configure the overlay without changing its passive security model." />
 
+                        <Border x:Name="UpdatesCard" Margin="0,14,0,0" Style="{DynamicResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{DynamicResource MicroLabel}" Text="APP UPDATES" />
+                                <TextBlock x:Name="CurrentAppVersionText" Margin="0,8,0,0" FontSize="15" FontWeight="SemiBold" />
+                                <CheckBox x:Name="CheckUpdatesOnStartupCheckBox" Margin="0,12,0,0" Style="{DynamicResource ToggleSwitch}"
+                                          Content="Check when the app opens" Click="CheckUpdatesOnStartupCheckBox_Click" />
+                                <TextBlock x:Name="AppUpdateStatusText" Margin="0,10,0,0" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}"
+                                           Text="Check for a new version. Downloads and restarts are your choice." TextWrapping="Wrap" />
+                                <ProgressBar x:Name="AppUpdateProgress" Visibility="Collapsed" Height="5" Margin="0,10,0,0" Minimum="0" Maximum="100"
+                                             Foreground="{DynamicResource EarningsGreenBrush}" Background="{DynamicResource SecondaryBackgroundBrush}" />
+                                <WrapPanel Margin="0,12,0,0">
+                                    <Button x:Name="CheckAppUpdatesButton" Margin="0,0,8,8" Style="{DynamicResource SecondaryButton}" Content="CHECK FOR UPDATES" Click="CheckAppUpdatesButton_Click" />
+                                    <Button x:Name="DownloadAppUpdateButton" Visibility="Collapsed" Margin="0,0,8,8" Style="{DynamicResource PrimaryButton}" Content="DOWNLOAD UPDATE" Click="DownloadAppUpdateButton_Click" />
+                                    <Button x:Name="CancelAppUpdateButton" Visibility="Collapsed" Margin="0,0,8,8" Style="{DynamicResource GhostButton}" Content="CANCEL" Click="CancelAppUpdateButton_Click" />
+                                    <Button x:Name="OpenAppReleasesButton" Margin="0,0,0,8" Style="{DynamicResource GhostButton}" Content="RELEASE PAGE" Click="OpenAppReleasesButton_Click" />
+                                </WrapPanel>
+                                <Expander x:Name="AppUpdateNotesExpander" Visibility="Collapsed" Header="What's new" Foreground="{DynamicResource PrimaryTextBrush}">
+                                    <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,8,0,0">
+                                        <TextBlock x:Name="AppUpdateNotesText" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                                    </ScrollViewer>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
                         <Border Margin="0,14,0,0" Style="{DynamicResource Card}">
                             <StackPanel>
                                 <Grid>

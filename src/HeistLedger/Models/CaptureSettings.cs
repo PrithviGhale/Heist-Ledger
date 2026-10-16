@@ -73,6 +73,8 @@ public sealed class CaptureSettings
 
     public string LastSelectedTab { get; set; } = "Dashboard";
 
+    public bool CheckForUpdatesOnStartup { get; set; } = true;
+
     [JsonIgnore]
     public bool HasCaptureArea => Width > 0 && Height > 0;
 

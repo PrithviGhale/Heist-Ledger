@@ -396,6 +396,7 @@ public partial class MainWindow : Window
         Topmost = _captureSettings.AlwaysOnTop;
         RestoreWindowPosition();
         LoadSettingsControls();
+        InitializeUpdatesUi();
         SelectTab(
             _captureSettings.LastSelectedTab.Equals("Settings", StringComparison.OrdinalIgnoreCase)
                 ? "Settings"
@@ -431,6 +432,8 @@ public partial class MainWindow : Window
 
         StartAmbientAnimations();
         await CompleteLoadingExperienceAsync();
+        if (_captureSettings.CheckForUpdatesOnStartup && !_isClosing)
+            _ = CheckAppUpdatesAsync(automatic: true);
     }
 
     private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -478,6 +481,7 @@ public partial class MainWindow : Window
     private void Window_Closed(object? sender, EventArgs e)
     {
         _isClosing = true;
+        _updateDownloadCancellation?.Cancel();
         StopAmbientAnimations();
         _resizeCompletion?.TrySetResult();
         RememberCurrentWindowPosition();
