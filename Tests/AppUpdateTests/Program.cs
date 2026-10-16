@@ -6,6 +6,7 @@ using GTAEarningsTracker.Models;
 using GTAEarningsTracker.Services;
 using Velopack;
 using Velopack.Locators;
+using Velopack.Sources;
 
 internal static class Program
 {
@@ -70,9 +71,11 @@ internal static class Program
                 "startup preference round-trips");
             if (args.Length == 1)
             {
-                var built = new AppUpdateService(() => new UpdateManager(Path.GetFullPath(args[0]),
-                    new UpdateOptions { ExplicitChannel = "win", AllowVersionDowngrade = false },
-                    new TestVelopackLocator("HeistLedger", "1.3.0", Path.Combine(root, "real-package"))));
+                var locator = new TestVelopackLocator("HeistLedger", "1.4.0", Path.Combine(root, "real-package"));
+                var options = new UpdateOptions { ExplicitChannel = "win", AllowVersionDowngrade = false };
+                var built = new AppUpdateService(() => args[0] == "--github"
+                    ? new UpdateManager(new GithubSource(AppUpdateService.RepositoryUrl, null, false), options, locator)
+                    : new UpdateManager(Path.GetFullPath(args[0]), options, locator));
                 var builtRelease = await built.CheckAsync(CancellationToken.None);
                 Assert(builtRelease?.Version == AppUpdateService.CurrentVersion, "generated installer feed offers the actual app version");
                 await built.DownloadAsync(new InlineProgress(), CancellationToken.None);
