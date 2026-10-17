@@ -17,7 +17,7 @@ try {
     dotnet tool restore
     if ($LASTEXITCODE -ne 0) { throw 'Could not restore the updater packaging tool.' }
     if ($DownloadPrevious) {
-        dotnet vpk download github --repoUrl 'https://github.com/PrithviGhale/Heist-Ledger' --channel win --outputDir $releasesPath
+        dotnet vpk download github --repoUrl 'https://github.com/PrithviGhale/Heist-Ledger-Updates' --channel win --outputDir $releasesPath
         if ($LASTEXITCODE -ne 0) { throw 'Could not download previous updater packages. Omit -DownloadPrevious for the first updater release.' }
     }
     dotnet publish 'src/HeistLedger/GTAEarningsTracker.csproj' -p:PublishProfile=UpdaterWindowsX64 --artifacts-path (Join-Path $outputPath 'build') -o $publishPath -p:NuGetAudit=false /nodeReuse:false

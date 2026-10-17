@@ -1,10 +1,10 @@
 # In-app updates
 
-Heist Ledger uses Velopack with the public GitHub Releases repository. No server subscription, account, or embedded access token is required. The `win` channel accepts stable releases and does not downgrade the installed version.
+Heist Ledger uses Velopack with the public [Heist-Ledger-Updates](https://github.com/PrithviGhale/Heist-Ledger-Updates) release repository starting with v1.5.1. The main Heist-Ledger repository is the human-facing download page. No server subscription, account, or embedded access token is required. The `win` channel accepts stable releases and does not downgrade the installed version.
 
 ## Using updates
 
-Install `HeistLedger-win-Setup.exe` once and launch Heist Ledger using its installed shortcut. Existing earnings and settings in `%LocalAppData%\GTAEarningsTracker` are reused. Close older ZIP copies; they continue to run independently and will not update themselves.
+Install `HeistLedger-Setup.exe` once and launch Heist Ledger using its installed shortcut. Existing earnings and settings in `%LocalAppData%\GTAEarningsTracker` are reused. Close older ZIP copies; they continue to run independently and will not update themselves.
 
 Settings > App Updates shows the installed version, optional startup checking, a manual check, plain-text release notes, and download progress. Downloading and installing are separate actions. A completed download is retained for a later restart, but nothing is automatically applied on launch. Install & Restart runs the normal WPF shutdown cleanup and refuses to interrupt a scan or unconfirmed payout.
 
@@ -34,7 +34,13 @@ For later releases, use `-DownloadPrevious` to retrieve the previous stable upda
 
 ## Publishing
 
-Bump the project version, write the matching release notes, run the tests, and rebuild the installer. On an authorized release, upload the Setup executable, full `.nupkg`, any delta `.nupkg`, `releases.win.json`, and the other generated Velopack metadata together on the corresponding stable GitHub release. A plain ZIP alone is insufficient for the update client. Publish the complete release as latest only after all assets have uploaded. Keep old releases available for delta updates.
+Bump the project version, write matching release notes, run the tests, and rebuild the installer. Upload all generated Velopack packages and metadata together to a stable release in **Heist-Ledger-Updates**. Publish that feed only after uploads finish. Copy the generated `HeistLedger-win-Setup.exe` to `HeistLedger-Setup.exe` and upload ONLY that installer to the matching main **Heist-Ledger** release. GitHub adds Source code archives automatically; they cannot be removed. Keep old update releases available for delta updates.
+
+### v1.5.1 migration compatibility
+
+v1.4.x and v1.5.0 installations still query the main repository. Its older v1.5.0 release retains a compatibility `releases.win.json` and the v1.5.1 full package, which switches them to the new update repository after installation. Do not delete those compatibility assets. The pinned Velopack GitHub source searches only the ten most recently published releases, so keep that compatibility release within this list while supporting old clients; before publishing enough releases to displace it, provide a renewed stable compatibility release (not a prerelease) or explicitly require old clients to install the latest Setup once. Do not remove the bridge merely because the latest release has a single installer.
+
+Verify both live paths after publishing with `AppUpdateTests --github` (new feed) and `AppUpdateTests --github-legacy` (old-client compatibility feed). These download and verify packages without installing the app.
 
 ## Local verification
 
