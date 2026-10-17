@@ -1009,7 +1009,7 @@ internal static class Program
             using (var drawing = visual.RenderOpen())
             {
                 drawing.DrawRectangle(new SolidColorBrush(Color.FromRgb(12, 18, 24)), null, new Rect(0, 0, 2560, 1440));
-                var scale = Math.Min(1, 2280d / source.PixelWidth);
+                var scale = Math.Min(1, Math.Min(2280d / source.PixelWidth, 1000d / source.PixelHeight));
                 var width = source.PixelWidth * scale;
                 var height = source.PixelHeight * scale;
                 drawing.DrawImage(source, new Rect(140, 360, width, height));

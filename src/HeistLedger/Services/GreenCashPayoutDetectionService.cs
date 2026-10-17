@@ -697,7 +697,9 @@ public sealed class GreenCashPayoutDetectionService
             for (var y = 0; y < crop.PixelHeight; y++)
             {
                 var i = y * stride + x * 4;
-                if (Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2])) >= 145) count++;
+                // GTA's translucent trailing zeros can be dark gray. Keep
+                // those pixels rather than trimming at the brightest digits.
+                if (Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2])) >= 58) count++;
             }
             if (count >= Math.Max(6, diameter * 0.10)) last = x;
             else if (last >= 0 && x - last > diameter * 0.45) break;
