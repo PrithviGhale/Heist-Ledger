@@ -35,6 +35,23 @@ public sealed class OptimizedGtaResultScreenDetectionService
         _amountOcr = amountOcr;
     }
 
+    public Int32Rect? LocateResultRegion(BitmapSource capture, CancellationToken cancellationToken)
+    {
+        var full = new Int32Rect(0, 0, capture.PixelWidth, capture.PixelHeight);
+        foreach (var variant in _preprocessing.CreateHeadingVariants(capture).Images)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var anchor = FindAnchor(_headingOcr.RecognizeHeading(variant, cancellationToken), variant.Scale, full);
+            if (anchor is null || anchor.Confidence < 0.6f || anchor.Bounds is not { } box) continue;
+            var x = Math.Max(0, box.X - (int)Math.Ceiling(box.Height * 1.4));
+            var y = Math.Max(0, box.Y - (int)Math.Ceiling(box.Height * 1.4));
+            var right = Math.Min(capture.PixelWidth, x + (int)Math.Ceiling(box.Width * 2.9));
+            var bottom = Math.Min(capture.PixelHeight, y + box.Height * 7);
+            return new Int32Rect(x, y, right - x, bottom - y);
+        }
+        return null;
+    }
+
     public GtaResultScreenDetectionResult Detect(
         BitmapSource capture,
         string imageFingerprint,

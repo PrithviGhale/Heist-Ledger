@@ -1,6 +1,7 @@
 <Window x:Class="GTAEarningsTracker.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:GTAEarningsTracker.Behaviors"
         Title="Heist Ledger"
         Icon="Assets/AppIcon.ico"
         Width="500"
@@ -41,7 +42,7 @@
             <Grid.Clip><RectangleGeometry x:Name="WindowContentClip" RadiusX="25" RadiusY="25" /></Grid.Clip>
             <Grid.RowDefinitions>
                 <RowDefinition Height="58" />
-                <RowDefinition Height="Auto" />
+                <RowDefinition Height="0" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -161,6 +162,16 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="SettingsTabButton" Style="{DynamicResource IconButton}" ToolTip="Settings" AutomationProperties.Name="Settings"
+                            Click="OpenSettingsButton_Click">
+                        <Grid Width="28" Height="26">
+                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Border x:Name="SettingsUpdateBadge" Visibility="Collapsed" Width="13" Height="13" CornerRadius="7" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Background="{DynamicResource EarningsGreenBrush}" AutomationProperties.Name="New update available">
+                                <TextBlock Text="!" Foreground="#091009" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
+                    </Button>
                     <Button x:Name="CompactModeTitleButton"
                             Style="{DynamicResource IconButton}"
                             Content="▣"
@@ -183,41 +194,6 @@
                             Click="CloseButton_Click" />
                 </StackPanel>
             </Grid>
-
-            <Border x:Name="NavigationBar"
-                    Grid.Row="1"
-                    Margin="20,0,20,8"
-                    Padding="3"
-                    Background="{DynamicResource SecondaryBackgroundBrush}"
-                    BorderBrush="{DynamicResource MutedBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="11">
-                <Grid x:Name="NavigationTrack" SizeChanged="NavigationTrack_SizeChanged">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Border x:Name="NavigationBubble" Grid.ColumnSpan="2" HorizontalAlignment="Left"
-                            Background="{DynamicResource AccentSurfaceBrush}" BorderBrush="{DynamicResource AccentBorderBrush}"
-                            BorderThickness="1" CornerRadius="10" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
-                        <Border.RenderTransform>
-                            <TransformGroup>
-                                <ScaleTransform x:Name="NavigationBubbleScale" />
-                                <TranslateTransform x:Name="NavigationBubbleTranslate" />
-                            </TransformGroup>
-                        </Border.RenderTransform>
-                    </Border>
-                    <Button x:Name="DashboardTabButton"
-                            Style="{DynamicResource NavigationTabButtonActive}"
-                            Content="DASHBOARD"
-                            Click="DashboardTabButton_Click" />
-                    <Button x:Name="SettingsTabButton"
-                            Grid.Column="1"
-                            Style="{DynamicResource NavigationTabButton}"
-                            Content="SETTINGS"
-                            Click="SettingsTabButton_Click" />
-                </Grid>
-            </Border>
 
             <Grid x:Name="ExpandedDashboard" Grid.Row="2" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
                 <Grid.RenderTransform>
@@ -314,7 +290,7 @@
                                     <Ellipse x:Name="LiveScannerDot" Width="8" Height="8" Fill="{DynamicResource MutedTextBrush}" />
                                     <StackPanel Grid.Column="2">
                                         <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="QUICK SCAN" />
-                                        <TextBlock x:Name="LiveScannerStatusText" Margin="0,2,0,0" FontSize="10" Text="Select area" />
+                                        <TextBlock x:Name="LiveScannerStatusText" Margin="0,2,0,0" FontSize="10" Text="Quick Scan ready" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -343,8 +319,8 @@
                                     </Grid.ColumnDefinitions>
                                     <Ellipse x:Name="CaptureAreaDot" Width="8" Height="8" Fill="{DynamicResource WarningGoldBrush}" />
                                     <StackPanel Grid.Column="2">
-                                        <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="CAPTURE AREA" />
-                                        <TextBlock x:Name="CaptureAreaStatusText" Margin="0,2,0,0" FontSize="10" Text="Not set" />
+                                        <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="DISPLAY" />
+                                        <TextBlock x:Name="CaptureAreaStatusText" Margin="0,2,0,0" FontSize="10" Text="Primary" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -372,7 +348,7 @@
                                                Margin="0,4,0,0"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="10"
-                                               Text="Capture and verify your selected GTA payout area"
+                                               Text="Capture your primary display and verify a payout"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                                 <Button x:Name="QuickCaptureButton"
@@ -892,7 +868,7 @@
                                                 Grid.Column="0"
                                                 Style="{DynamicResource SecondaryButton}"
                                                 Content="CHANGE CAPTURE AREA"
-                                                Click="SelectCaptureAreaButton_Click" />
+                                                Visibility="Collapsed" Click="SelectCaptureAreaButton_Click" />
                                         <Button x:Name="TestCaptureButton"
                                                 Grid.Column="2"
                                                 Style="{DynamicResource GhostButton}"
@@ -1130,6 +1106,7 @@
                 </ScrollViewer>
 
                 <ScrollViewer x:Name="SettingsScrollViewer"
+                              behaviors:SmoothScrollBehavior.IsEnabled="True"
                               Visibility="Collapsed"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto"
@@ -1139,27 +1116,46 @@
                         <TranslateTransform X="0" />
                     </ScrollViewer.RenderTransform>
                     <StackPanel Margin="20,4,20,22">
-                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="SETTINGS" />
+                        <Button x:Name="SettingsBackButton" HorizontalAlignment="Left" Margin="0,0,0,12" Style="{DynamicResource SettingsChip}" Content="←  Back to home" Click="DashboardTabButton_Click" />
+                        <TextBlock Foreground="{DynamicResource EarningsGreenBrush}" FontSize="9" FontWeight="SemiBold" Text="MAKE IT YOURS" />
+                        <TextBlock Margin="0,6,0,0" FontSize="28" FontWeight="SemiBold" Text="Control room" />
                         <TextBlock Margin="0,4,0,0"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="11"
-                                   Text="Configure the overlay without changing its passive security model." />
+                                   Text="Your profile, your style, your setup." />
+                        <WrapPanel Margin="0,16,0,0">
+                            <Button Style="{DynamicResource SettingsChip}" Content="Updates" Tag="UpdatesCard" Click="SettingsSectionButton_Click" />
+                            <Button Style="{DynamicResource SettingsChip}" Content="Profile" Tag="SettingsProfileCard" Click="SettingsSectionButton_Click" />
+                            <Button Style="{DynamicResource SettingsChip}" Content="Style" Tag="SettingsAppearanceCard" Click="SettingsSectionButton_Click" />
+                            <Button Style="{DynamicResource SettingsChip}" Content="Quick Scan" Tag="SettingsCaptureCard" Click="SettingsSectionButton_Click" />
+                            <Button Style="{DynamicResource SettingsChip}" Content="Discord" Tag="SettingsDiscordCard" Click="SettingsSectionButton_Click" />
+                        </WrapPanel>
 
-                        <Border x:Name="UpdatesCard" Margin="0,14,0,0" Style="{DynamicResource Card}">
+                        <Border x:Name="UpdatesCard" Margin="0,14,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="APP UPDATES" />
+                                <Grid>
+                                    <StackPanel Margin="0,0,100,0">
+                                        <TextBlock Style="{DynamicResource SettingsEyebrow}" Text="STAY CURRENT" />
+                                        <TextBlock Margin="0,5,0,0" FontSize="19" FontWeight="SemiBold" Text="App updates" />
+                                    </StackPanel>
+                                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Padding="9,5" CornerRadius="9" Background="{DynamicResource AccentSurfaceBrush}">
+                                        <TextBlock x:Name="SettingsUpdateStateText" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource EarningsGreenBrush}" Text="VERSION" />
+                                    </Border>
+                                </Grid>
                                 <TextBlock x:Name="CurrentAppVersionText" Margin="0,8,0,0" FontSize="15" FontWeight="SemiBold" />
                                 <CheckBox x:Name="CheckUpdatesOnStartupCheckBox" Margin="0,12,0,0" Style="{DynamicResource ToggleSwitch}"
                                           Content="Check when the app opens" Click="CheckUpdatesOnStartupCheckBox_Click" />
-                                <TextBlock x:Name="AppUpdateStatusText" Margin="0,10,0,0" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}"
-                                           Text="Check for a new version. Downloads and restarts are your choice." TextWrapping="Wrap" />
+                                <Border Margin="0,12,0,0" Padding="12" CornerRadius="12" Background="{DynamicResource SecondaryBackgroundBrush}">
+                                    <TextBlock x:Name="AppUpdateStatusText" FontSize="11" LineHeight="17" Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="Check for a new version. Downloads and restarts are your choice." TextWrapping="Wrap" />
+                                </Border>
                                 <ProgressBar x:Name="AppUpdateProgress" Visibility="Collapsed" Height="5" Margin="0,10,0,0" Minimum="0" Maximum="100"
                                              Foreground="{DynamicResource EarningsGreenBrush}" Background="{DynamicResource SecondaryBackgroundBrush}" />
                                 <WrapPanel Margin="0,12,0,0">
-                                    <Button x:Name="CheckAppUpdatesButton" Margin="0,0,8,8" Style="{DynamicResource SecondaryButton}" Content="CHECK FOR UPDATES" Click="CheckAppUpdatesButton_Click" />
-                                    <Button x:Name="DownloadAppUpdateButton" Visibility="Collapsed" Margin="0,0,8,8" Style="{DynamicResource PrimaryButton}" Content="DOWNLOAD UPDATE" Click="DownloadAppUpdateButton_Click" />
-                                    <Button x:Name="CancelAppUpdateButton" Visibility="Collapsed" Margin="0,0,8,8" Style="{DynamicResource GhostButton}" Content="CANCEL" Click="CancelAppUpdateButton_Click" />
-                                    <Button x:Name="OpenAppReleasesButton" Margin="0,0,0,8" Style="{DynamicResource GhostButton}" Content="RELEASE PAGE" Click="OpenAppReleasesButton_Click" />
+                                    <Button x:Name="CheckAppUpdatesButton" Margin="0,0,8,8" Style="{DynamicResource SettingsSecondaryButton}" Content="CHECK FOR UPDATES" Click="CheckAppUpdatesButton_Click" />
+                                    <Button x:Name="DownloadAppUpdateButton" Visibility="Collapsed" Margin="0,0,8,8" Style="{DynamicResource SettingsPrimaryButton}" Content="DOWNLOAD UPDATE" Click="DownloadAppUpdateButton_Click" />
+                                    <Button x:Name="CancelAppUpdateButton" Visibility="Collapsed" Margin="0,0,8,8" Style="{DynamicResource SettingsGhostButton}" Content="CANCEL" Click="CancelAppUpdateButton_Click" />
+                                    <Button x:Name="OpenAppReleasesButton" Margin="0,0,0,8" Style="{DynamicResource SettingsGhostButton}" Content="RELEASE PAGE" Click="OpenAppReleasesButton_Click" />
                                 </WrapPanel>
                                 <Expander x:Name="AppUpdateNotesExpander" Visibility="Collapsed" Header="What's new" Foreground="{DynamicResource PrimaryTextBrush}">
                                     <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,8,0,0">
@@ -1168,16 +1164,13 @@
                                 </Expander>
                             </StackPanel>
                         </Border>
-                        <Border Margin="0,14,0,0" Style="{DynamicResource Card}">
+                        <Border x:Name="SettingsProfileCard" Margin="0,14,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
                                 <Grid>
                                     <StackPanel>
-                                        <TextBlock Style="{DynamicResource MicroLabel}" Text="PLAYER PROFILE" />
+                                        <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Player profile" />
                                         <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" Text="Your name appears in greetings and Discord payout posts." TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <Border HorizontalAlignment="Right" Padding="9,5" Background="{DynamicResource AccentSurfaceBrush}" BorderBrush="{DynamicResource AccentBorderBrush}" BorderThickness="1" CornerRadius="9">
-                                        <TextBlock Foreground="{DynamicResource EarningsGreenBrush}" FontSize="9" FontWeight="SemiBold" Text="PROFILE" />
-                                    </Border>
                                 </Grid>
                                 <TextBlock Margin="0,13,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Player name" />
                                 <TextBox x:Name="ProfileUsernameTextBox"
@@ -1190,14 +1183,14 @@
                                          MaxLength="80"
                                          VerticalContentAlignment="Center"
                                          ToolTip="Leave blank to use Player" />
-                                <Button Margin="0,10,0,0" Style="{DynamicResource PrimaryButton}" Content="SAVE PLAYER NAME" Click="SaveProfileButton_Click" />
+                                <Button Margin="0,10,0,0" Style="{DynamicResource SettingsPrimaryButton}" Content="SAVE PLAYER NAME" Click="SaveProfileButton_Click" />
                                 <TextBlock x:Name="ProfileStatusText" Margin="2,8,2,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="If blank, the app will call you Player." TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border x:Name="SettingsAppearanceCard" Margin="0,12,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="APPEARANCE" />
+                                <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Appearance" />
                                 <TextBlock Margin="0,7,0,0"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="11"
@@ -1226,9 +1219,9 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border Margin="0,12,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="QUICK SCAN SHORTCUT" />
+                                <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Quick Scan shortcut" />
                                 <CheckBox x:Name="HotkeyEnabledCheckBox"
                                           Margin="0,14,0,0"
                                           Style="{DynamicResource ToggleSwitch}"
@@ -1273,16 +1266,16 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <Button x:Name="RecordHotkeyButton"
-                                            Style="{DynamicResource SecondaryButton}"
+                                            Style="{DynamicResource SettingsSecondaryButton}"
                                             Content="Record New Shortcut"
                                             Click="RecordHotkeyButton_Click" />
                                     <Button Grid.Column="2"
-                                            Style="{DynamicResource GhostButton}"
+                                            Style="{DynamicResource SettingsGhostButton}"
                                             Content="Reset to Ctrl + Shift + H"
                                             Click="ResetHotkeyButton_Click" />
                                 </Grid>
                                 <Button Margin="0,9,0,0"
-                                        Style="{DynamicResource PrimaryButton}"
+                                        Style="{DynamicResource SettingsPrimaryButton}"
                                         Content="Apply Shortcut"
                                         Click="ApplyHotkeyButton_Click" />
                                 <TextBlock x:Name="HotkeyRegistrationStatusText"
@@ -1293,7 +1286,7 @@
                                            TextWrapping="Wrap" />
 
                                 <Border Height="1" Margin="0,18,0,16" Background="{DynamicResource MutedBorderBrush}" />
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="MINIMIZE APP SHORTCUT" />
+                                <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Minimize shortcut" />
                                 <CheckBox x:Name="MinimizeHotkeyEnabledCheckBox"
                                           Margin="0,14,0,0"
                                           Style="{DynamicResource ToggleSwitch}"
@@ -1323,17 +1316,17 @@
                                         <ColumnDefinition Width="8" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Button x:Name="RecordMinimizeHotkeyButton" Style="{DynamicResource SecondaryButton}" Content="Record Minimize Shortcut" Click="RecordMinimizeHotkeyButton_Click" />
-                                    <Button Grid.Column="2" Style="{DynamicResource GhostButton}" Content="Reset to Ctrl + Shift + M" Click="ResetMinimizeHotkeyButton_Click" />
+                                    <Button x:Name="RecordMinimizeHotkeyButton" Style="{DynamicResource SettingsSecondaryButton}" Content="Record Minimize Shortcut" Click="RecordMinimizeHotkeyButton_Click" />
+                                    <Button Grid.Column="2" Style="{DynamicResource SettingsGhostButton}" Content="Reset to Ctrl + Shift + M" Click="ResetMinimizeHotkeyButton_Click" />
                                 </Grid>
-                                <Button Margin="0,9,0,0" Style="{DynamicResource PrimaryButton}" Content="Apply Minimize Shortcut" Click="ApplyMinimizeHotkeyButton_Click" />
+                                <Button Margin="0,9,0,0" Style="{DynamicResource SettingsPrimaryButton}" Content="Apply Minimize Shortcut" Click="ApplyMinimizeHotkeyButton_Click" />
                                 <TextBlock x:Name="MinimizeHotkeyRegistrationStatusText" Margin="0,9,0,0" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" Text="Registration status: Waiting for startup" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border Margin="0,12,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="WINDOW BEHAVIOR" />
+                                <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Window &amp; overlay" />
                                 <CheckBox x:Name="AlwaysOnTopSettingCheckBox"
                                           Margin="0,14,0,0"
                                           Style="{DynamicResource ToggleSwitch}"
@@ -1368,9 +1361,9 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border Margin="0,12,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="OCR ENGINES" />
+                                <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Recognition engines" />
                                 <CheckBox Margin="0,13,0,0"
                                           IsChecked="True"
                                           IsEnabled="False"
@@ -1404,9 +1397,9 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border Margin="0,12,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="SCANNER PERFORMANCE" />
+                                <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Scan preferences" />
                                 <ComboBox x:Name="ScannerAreaModeComboBox"
                                           Visibility="Collapsed"
                                           SelectedIndex="1">
@@ -1442,13 +1435,13 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border x:Name="SettingsCaptureCard" Margin="0,12,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="QUICK SCAN" />
+                                <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Quick Scan" />
                                 <TextBlock Margin="0,10,0,0"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="11"
-                                           Text="Quick Scan analyzes only your confirmed payout rectangle using a five-frame in-memory verification burst."
+                                           Text="Quick Scan captures the primary display, locates a payout, and verifies the digits using a five-frame burst. No area selection is needed."
                                            TextWrapping="Wrap" />
                                 <ComboBox x:Name="QuickCaptureMonitorComboBox"
                                           Visibility="Collapsed" />
@@ -1462,7 +1455,7 @@
                                            Margin="0,13,0,0"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="10"
-                                           Text="Selected payout area: Not selected"
+                                           Text="Quick Scan captures the entire primary display. No capture area setup is needed."
                                            TextWrapping="Wrap" />
                                 <Border Height="145"
                                         Margin="0,12,0,0"
@@ -1475,32 +1468,19 @@
                                         <Image x:Name="SettingsCapturePreviewImage" Margin="6" Stretch="Uniform" />
                                         <StackPanel x:Name="SettingsCapturePreviewPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <TextBlock HorizontalAlignment="Center" Foreground="{DynamicResource ScannerCyanBrush}" FontSize="20" Text="▣" />
-                                            <TextBlock Margin="0,7,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="Capture-area preview" />
+                                            <TextBlock Margin="0,7,0,0" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" Text="Primary-display preview" />
                                         </StackPanel>
                                     </Grid>
                                 </Border>
                                 <Button Margin="0,9,0,0"
-                                        Style="{DynamicResource PrimaryButton}"
-                                        Content="PREVIEW SELECTED AREA"
+                                        Style="{DynamicResource SettingsPrimaryButton}"
+                                        Content="PREVIEW PRIMARY DISPLAY"
                                         Click="PreviewSettingsCaptureButton_Click" />
-                                <Grid Margin="0,10,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="8" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Button Style="{DynamicResource SecondaryButton}"
-                                            Content="CHANGE CAPTURE AREA"
-                                            Click="SelectCaptureAreaButton_Click" />
-                                    <Button Grid.Column="2"
-                                            Style="{DynamicResource DangerButton}"
-                                            Content="RESET CAPTURE AREA"
-                                            Click="ClearCaptureAreaButton_Click" />
-                                </Grid>
+
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border x:Name="SettingsDiscordCard" Margin="0,12,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -1508,7 +1488,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock Style="{DynamicResource MicroLabel}" Text="DISCORD WEBHOOK" />
+                                        <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Discord connection" />
                                         <TextBlock Margin="0,6,0,0"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    FontSize="11"
@@ -1569,12 +1549,12 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <Button x:Name="SaveDiscordSettingsButton"
-                                            Style="{DynamicResource PrimaryButton}"
+                                            Style="{DynamicResource SettingsPrimaryButton}"
                                             Content="SAVE DISCORD"
                                             Click="SaveDiscordSettingsButton_Click" />
                                     <Button x:Name="TestDiscordWebhookButton"
                                             Grid.Column="2"
-                                            Style="{DynamicResource SecondaryButton}"
+                                            Style="{DynamicResource SettingsSecondaryButton}"
                                             Content="SEND TEST"
                                             Click="TestDiscordWebhookButton_Click" />
                                 </Grid>
@@ -1594,9 +1574,9 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="0,12,0,0" Style="{DynamicResource Card}">
+                        <Border Margin="0,12,0,0" Style="{DynamicResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Style="{DynamicResource MicroLabel}" Text="PRIVACY AND SAFETY" />
+                                <TextBlock Style="{DynamicResource SettingsSectionTitle}" Text="Privacy &amp; safety" />
                                 <TextBlock Margin="0,10,0,0"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="11"
@@ -1651,7 +1631,7 @@
                                 Margin="0,16,0,0"
                                 Style="{DynamicResource PrimaryButton}"
                                 Content="SELECT PAYOUT AREA"
-                                Click="SelectCaptureAreaButton_Click" />
+                                Visibility="Collapsed" Click="SelectCaptureAreaButton_Click" />
                         <TextBlock Margin="0,13,0,0"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="10"

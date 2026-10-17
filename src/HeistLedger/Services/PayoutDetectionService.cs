@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Windows;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Windows.Media;
@@ -70,6 +71,9 @@ public sealed class PayoutDetectionService : IDisposable
             headingOcrService,
             amountOcrService);
     }
+
+    public Int32Rect? LocateFullScreenResult(BitmapSource image, CancellationToken token) =>
+        _gtaResultScreenDetectionService.LocateResultRegion(image, token);
 
     public PayoutAnalysisResult Analyze(BitmapSource capturedImage, CancellationToken cancellationToken)
     {

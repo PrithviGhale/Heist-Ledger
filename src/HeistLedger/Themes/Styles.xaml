@@ -25,6 +25,20 @@
         </Style.Triggers>
     </Style>
 
+    <Style x:Key="SettingsCard" TargetType="Border" BasedOn="{StaticResource Card}">
+        <Setter Property="CornerRadius" Value="22" />
+        <Setter Property="Padding" Value="20" />
+        <Setter Property="Background" Value="{DynamicResource ElevatedCardBrush}" />
+    </Style>
+    <Style x:Key="SettingsEyebrow" TargetType="TextBlock" BasedOn="{StaticResource MicroLabel}">
+        <Setter Property="FontSize" Value="9" />
+        <Setter Property="Foreground" Value="{DynamicResource EarningsGreenBrush}" />
+    </Style>
+    <Style x:Key="SettingsSectionTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+    </Style>
     <Style x:Key="StatusPill" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource SecondaryBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource MutedBorderBrush}" />
@@ -130,6 +144,26 @@
         <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
     </Style>
 
+    <Style x:Key="SettingsPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+        <Setter Property="Height" Value="42" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Padding" Value="15,0" />
+    </Style>
+    <Style x:Key="SettingsSecondaryButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+        <Setter Property="Height" Value="42" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Padding" Value="15,0" />
+    </Style>
+    <Style x:Key="SettingsGhostButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+        <Setter Property="Height" Value="36" />
+        <Setter Property="FontSize" Value="10" />
+    </Style>
+    <Style x:Key="SettingsChip" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+        <Setter Property="Height" Value="30" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Margin" Value="0,0,6,6" />
+    </Style>
     <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource BaseButton}">
         <Setter Property="Width" Value="34" />
         <Setter Property="Height" Value="32" />

@@ -51,7 +51,7 @@ public sealed class CaptureSettingsService
     public static CaptureSettings Migrate(CaptureSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        settings.AreaMode = ScannerAreaMode.SelectedRegion;
+        settings.AreaMode = ScannerAreaMode.FullScreen;
         settings.RequireQuickCaptureConfirmation = true;
         return settings;
     }
