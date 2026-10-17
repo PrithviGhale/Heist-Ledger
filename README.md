@@ -4,7 +4,7 @@ Heist Ledger is a standalone Windows companion for tracking GTA Online earnings.
 
 ## Download
 
-Download `HeistLedger-win-Setup.exe` from the [GitHub Releases page](https://github.com/PrithviGhale/Heist-Ledger/releases/latest), close any older copy, and run Setup. Launch Heist Ledger using its installed shortcut.
+Download **[HeistLedger-Setup.exe](https://github.com/PrithviGhale/Heist-Ledger/releases/latest/download/HeistLedger-Setup.exe)**, close any older copy, and run Setup. Launch Heist Ledger using its installed shortcut. This is the only file you need; ignore GitHub's automatic source-code archive links.
 
 The Windows x64 package is self-contained, so users do not need to install .NET separately. OCR requires the Microsoft Visual C++ 2015-2022 x64 Redistributable. Releases are not Authenticode-signed, so Windows SmartScreen may identify the app as unrecognized; published releases include a SHA-256 checksum for verification.
 

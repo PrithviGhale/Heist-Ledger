@@ -9,13 +9,14 @@ public sealed record AppUpdateRelease(string Version, string Notes);
 public sealed class AppUpdateService
 {
     public const string RepositoryUrl = "https://github.com/PrithviGhale/Heist-Ledger";
+    public const string UpdateRepositoryUrl = "https://github.com/PrithviGhale/Heist-Ledger-Updates";
     public const string DownloadsUrl = RepositoryUrl + "/releases/latest";
     private readonly Lazy<UpdateManager> _manager;
     private readonly SemaphoreSlim _operation = new(1, 1);
     private UpdateInfo? _available;
 
     public AppUpdateService() : this(() => new UpdateManager(
-        new GithubSource(RepositoryUrl, accessToken: null, prerelease: false),
+        new GithubSource(UpdateRepositoryUrl, accessToken: null, prerelease: false),
         new UpdateOptions { ExplicitChannel = "win", AllowVersionDowngrade = false })) { }
 
     // A local feed and test locator can exercise the real download/verification
