@@ -80,7 +80,6 @@ public partial class MainWindow : Window
     private bool _scannerPulseRunning;
     private bool _isLoaded;
     private bool _isRecordingHotkey;
-    private bool _isSelectingCaptureArea;
     private bool _isModeTransitioning;
     private bool _isTabTransitioning;
     private string _requestedTab = "Dashboard";
@@ -371,27 +370,9 @@ public partial class MainWindow : Window
                 "The saved webhook could not be unlocked for this Windows account. Enter it again.";
         }
         _uiPreferences.Theme = _uiThemeService.Apply(_uiPreferences.Theme);
-        savedCaptureSettings.AreaMode = ScannerAreaMode.SelectedRegion;
-        savedCaptureSettings.RequireQuickCaptureConfirmation = true;
-        var hadSavedCaptureArea = savedCaptureSettings.HasCaptureArea;
-        var hadConfirmedSavedArea = savedCaptureSettings.CaptureAreaConfirmed;
-        var hasValidSavedArea = savedCaptureSettings.CaptureAreaConfirmed &&
-            _screenCaptureService.IsValidCaptureArea(savedCaptureSettings);
         _captureSettings = savedCaptureSettings;
+        RefreshPrimaryCaptureArea();
         _paddleOcrService.Enabled = _captureSettings.PaddleOcrEnabled;
-        if (!hasValidSavedArea)
-        {
-            _captureSettings.X = 0;
-            _captureSettings.Y = 0;
-            _captureSettings.Width = 0;
-            _captureSettings.Height = 0;
-            _captureSettings.CaptureAreaConfirmed = false;
-        }
-
-        if (!hasValidSavedArea && hadSavedCaptureArea && hadConfirmedSavedArea)
-        {
-            CaptureStatusText.Text = "Saved capture coordinates were invalid and were not restored.";
-        }
 
         Topmost = _captureSettings.AlwaysOnTop;
         RestoreWindowPosition();
@@ -414,14 +395,7 @@ public partial class MainWindow : Window
         _ = InitializePaddleOcrStatusAsync();
         AutomaticDetectionCheckBox.IsChecked = false;
         UpdateWindowCaptureBounds();
-        if (!hasValidSavedArea)
-        {
-            ShowCaptureSetupState();
-        }
-        else
-        {
-            ShowNormalInterface();
-        }
+        ShowNormalInterface();
 
         if (!_isCompactMode)
         {
@@ -596,79 +570,10 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private async void SelectCaptureAreaButton_Click(object sender, RoutedEventArgs e)
+    private void SelectCaptureAreaButton_Click(object sender, RoutedEventArgs e)
     {
-        LivePreviewCheckBox.IsChecked = false;
-        AutomaticDetectionCheckBox.IsChecked = false;
-        CaptureStatusText.Text = string.Empty;
-
-        bool? selectionResult = null;
-        CaptureSelectionWindow? selectionWindow = null;
-
-        try
-        {
-            selectionWindow = new CaptureSelectionWindow(_screenCaptureService);
-            _isSelectingCaptureArea = true;
-            Hide();
-            selectionResult = selectionWindow.ShowDialog();
-        }
-        catch (Exception)
-        {
-            CaptureStatusText.Text = "Capture failed.";
-        }
-        finally
-        {
-            _isSelectingCaptureArea = false;
-            Show();
-            Activate();
-        }
-
-        if (selectionResult != true || selectionWindow?.SelectedArea is null)
-        {
-            if (CaptureStatusText.Text.Length == 0)
-            {
-                CaptureStatusText.Text = "Selection cancelled.";
-            }
-
-            if (!HasConfirmedCaptureArea())
-            {
-                ShowCaptureSetupState();
-            }
-
-            return;
-        }
-
-        _captureSettings.X = selectionWindow.SelectedArea.X;
-        _captureSettings.Y = selectionWindow.SelectedArea.Y;
-        _captureSettings.Width = selectionWindow.SelectedArea.Width;
-        _captureSettings.Height = selectionWindow.SelectedArea.Height;
-        _captureSettings.AreaMode = ScannerAreaMode.SelectedRegion;
-        _captureSettings.CaptureAreaConfirmed = true;
-        _captureSettings.RequireQuickCaptureConfirmation = true;
-        CapturePreviewImage.Source = null;
-        CapturePreviewPlaceholderText.Visibility = Visibility.Visible;
+        RefreshPrimaryCaptureArea();
         UpdateCaptureAreaDisplay();
-
-        try
-        {
-            await _captureSettingsService.SaveAsync(_captureSettings);
-            CaptureStatusText.Text = "Capture area selected.";
-            var preview = _screenCaptureService.Capture(_captureSettings);
-            SetupPreviewImage.Source = preview;
-            SettingsCapturePreviewImage.Source = preview;
-            SettingsCapturePreviewPlaceholder.Visibility = Visibility.Collapsed;
-            SetupPreviewBorder.Visibility = Visibility.Visible;
-            SetupStatusText.Text = "Capture area ready";
-            await Task.Delay(450);
-            ShowNormalInterface();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _captureSettings.CaptureAreaConfirmed = false;
-            CaptureStatusText.Text = "Capture area selected, but the settings file could not be saved.";
-            SetupStatusText.Text = "The area could not be saved. Select it again to enable Quick Scan.";
-            ShowCaptureSetupState();
-        }
     }
 
     private async void TestCaptureButton_Click(object sender, RoutedEventArgs e)
@@ -678,7 +583,7 @@ public partial class MainWindow : Window
 
     private async void LivePreviewCheckBox_Checked(object sender, RoutedEventArgs e)
     {
-        if (!HasConfirmedCaptureArea())
+        if (!HasUsableScreen())
         {
             CaptureStatusText.Text = "No capture area selected.";
             LivePreviewCheckBox.IsChecked = false;
@@ -686,7 +591,7 @@ public partial class MainWindow : Window
         }
 
         await CaptureSelectedAreaAsync(showSuccessStatus: true);
-        if (HasConfirmedCaptureArea() &&
+        if (HasUsableScreen() &&
             AutomaticDetectionCheckBox.IsChecked != true)
         {
             _livePreviewTimer.Start();
@@ -737,7 +642,7 @@ public partial class MainWindow : Window
     private async Task CaptureSelectedAreaAsync(bool showSuccessStatus, bool forSettings = false)
     {
         if (_previewCaptureInProgress || _quickScanInProgress || _isClosing) return;
-        if (!HasConfirmedCaptureArea())
+        if (!HasUsableScreen())
         {
             _livePreviewTimer.Stop();
             LivePreviewCheckBox.IsChecked = false;
@@ -783,50 +688,27 @@ public partial class MainWindow : Window
 
     private void UpdateCaptureAreaDisplay()
     {
-        var hasArea = HasConfirmedCaptureArea();
-        var text = hasArea
-            ? $"Capture area: X {_captureSettings.X}, Y {_captureSettings.Y}, W {_captureSettings.Width}, H {_captureSettings.Height}"
-            : "Capture area: Not selected";
-        CaptureAreaText.Text = text;
-        SettingsCaptureAreaText.Text = hasArea
-            ? $"Selected payout area: X {_captureSettings.X}, Y {_captureSettings.Y}, W {_captureSettings.Width}, H {_captureSettings.Height}"
-            : "Selected payout area: Not selected";
+        var hasArea = HasUsableScreen();
+        CaptureAreaText.Text = hasArea ? $"Primary display: {_captureSettings.Width} × {_captureSettings.Height}" : "Primary display unavailable";
+        SettingsCaptureAreaText.Text = CaptureAreaText.Text;
         UpdateDashboardStatus();
     }
 
     private void ShowCaptureSetupState()
     {
-        MinWidth = 460;
-        MinHeight = 560;
-        MaxWidth = 560;
-        Width = 500;
-        Height = 640;
-        CaptureSetupPanel.Visibility = Visibility.Visible;
-        ExpandedDashboard.Visibility = Visibility.Collapsed;
-        CompactDashboard.Visibility = Visibility.Collapsed;
-        NavigationBar.Visibility = Visibility.Collapsed;
-        SetupStatusText.Text = "Select a payout area to continue.";
-        SetupPreviewBorder.Visibility = Visibility.Collapsed;
-        QuickCaptureButton.IsEnabled = false;
-        CompactQuickCaptureButton.IsEnabled = false;
-        AutomaticDetectionCheckBox.IsChecked = false;
+        ShowNormalInterface();
+        CaptureStatusText.Text = "Primary display unavailable. Reconnect the display and try again.";
     }
 
     private void ShowNormalInterface()
     {
-        if (!HasConfirmedCaptureArea())
-        {
-            ShowCaptureSetupState();
-            return;
-        }
-
         CaptureSetupPanel.Visibility = Visibility.Collapsed;
         ApplyWindowMode(_isCompactMode);
         ExpandedDashboard.Visibility = _isCompactMode ? Visibility.Collapsed : Visibility.Visible;
         CompactDashboard.Visibility = _isCompactMode ? Visibility.Visible : Visibility.Collapsed;
-        NavigationBar.Visibility = _isCompactMode ? Visibility.Collapsed : Visibility.Visible;
-        QuickCaptureButton.IsEnabled = true;
-        CompactQuickCaptureButton.IsEnabled = true;
+        var ready = HasUsableScreen();
+        QuickCaptureButton.IsEnabled = ready;
+        CompactQuickCaptureButton.IsEnabled = ready;
     }
 
     private async void AnalyzeCaptureButton_Click(object sender, RoutedEventArgs e)
@@ -845,10 +727,10 @@ public partial class MainWindow : Window
     {
         // Repeated hotkey presses must not queue multiple expensive OCR bursts.
         if (_quickScanInProgress || _isClosing) return;
-        if (!HasConfirmedCaptureArea())
+        if (!HasUsableScreen())
         {
             ShowCaptureSetupState();
-            ShowQuickCaptureStatusNotification("Select a payout area before scanning.");
+            ShowQuickCaptureStatusNotification("Primary display unavailable.");
             return;
         }
 
@@ -921,9 +803,10 @@ public partial class MainWindow : Window
             }
 
             SetQuickScanState("Finding payout…", "ANALYZING…");
-            var greenIconAnalysis = await Task.Run(
-                () => _greenCashPayoutDetectionService.Analyze(frames, cancellationToken),
-                cancellationToken);
+            var resultRegion = await Task.Run(() => _payoutDetectionService.LocateFullScreenResult(frames[0], cancellationToken), cancellationToken);
+            frames = await Task.Run(() => FullScreenScanService.CropFrames(frames, resultRegion), cancellationToken);
+            var greenIconAnalysis = resultRegion is not null ? null : await Task.Run(
+                () => _greenCashPayoutDetectionService.Analyze(frames, cancellationToken, fullScreen: true), cancellationToken);
             var selectedResult = greenIconAnalysis is not null
                 ? new BurstPayoutAnalysisResult(
                     greenIconAnalysis,
@@ -957,7 +840,7 @@ public partial class MainWindow : Window
                 var additionalFrames = await Task.Run(
                     () => CaptureBurst(selectedBounds, 2, cancellationToken),
                     cancellationToken);
-                frames.AddRange(additionalFrames);
+                frames.AddRange(await Task.Run(() => FullScreenScanService.CropFrames(additionalFrames, resultRegion), cancellationToken));
                 if (shouldRestoreWindow)
                 {
                     ShowExistingMainWindow();
@@ -1217,7 +1100,7 @@ public partial class MainWindow : Window
 
     private CaptureSettings? GetAutomaticCaptureArea()
     {
-        return HasConfirmedCaptureArea()
+        return HasUsableScreen()
             ? new CaptureSettings
             {
                 X = _captureSettings.X,
@@ -1228,10 +1111,22 @@ public partial class MainWindow : Window
             : null;
     }
 
-    private bool HasConfirmedCaptureArea()
+    private void RefreshPrimaryCaptureArea()
     {
-        return _captureSettings.CaptureAreaConfirmed &&
-            _screenCaptureService.IsValidCaptureArea(_captureSettings);
+        var screen = _screenCaptureService.GetPrimaryScreenBounds();
+        _captureSettings.X = screen.X;
+        _captureSettings.Y = screen.Y;
+        _captureSettings.Width = screen.Width;
+        _captureSettings.Height = screen.Height;
+        _captureSettings.AreaMode = ScannerAreaMode.FullScreen;
+        _captureSettings.CaptureAreaConfirmed = true;
+        _captureSettings.QuickCaptureMonitorId = "Primary";
+    }
+
+    private bool HasUsableScreen()
+    {
+        RefreshPrimaryCaptureArea();
+        return _screenCaptureService.IsValidCaptureArea(_captureSettings);
     }
 
     private void AutomaticDetectionCheckBox_Unchecked(object sender, RoutedEventArgs e)
@@ -1389,7 +1284,7 @@ public partial class MainWindow : Window
 
     private async Task RunOcrScanAsync(CancellationToken cancellationToken)
     {
-        if (!HasConfirmedCaptureArea())
+        if (!HasUsableScreen())
         {
             OcrStatusText.Text = "No capture area selected.";
             DiagnosticStatusText.Text = "Scan status: Capture area missing";
@@ -2168,7 +2063,7 @@ public partial class MainWindow : Window
 
     private void SetQuickCaptureProcessing(bool isProcessing)
     {
-        var canScan = !isProcessing && HasConfirmedCaptureArea();
+        var canScan = !isProcessing && HasUsableScreen();
         QuickCaptureButton.IsEnabled = canScan;
         CompactQuickCaptureButton.IsEnabled = canScan;
         if (!isProcessing)
@@ -2333,7 +2228,7 @@ public partial class MainWindow : Window
 
     private async void PreviewSettingsCaptureButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!HasConfirmedCaptureArea())
+        if (!HasUsableScreen())
         {
             SettingsCapturePreviewImage.Source = null;
             SettingsCapturePreviewPlaceholder.Visibility = Visibility.Visible;
@@ -2609,7 +2504,7 @@ public partial class MainWindow : Window
             ? "Verify payout"
             : hasCaptureArea
                 ? "Quick Scan ready"
-                : "Select payout area";
+                : "Display unavailable";
         const bool automaticDetectionEnabled = false;
 
         LiveScannerStatusText.Text = quickScanStatus;
@@ -2620,10 +2515,10 @@ public partial class MainWindow : Window
         OcrReadyStatusText.Text = ocrReady ? "Ready" : "Standby";
         OcrReadyDot.Fill = GetThemeBrush(ocrReady ? "ScannerCyanBrush" : "MutedTextBrush");
 
-        CaptureAreaStatusText.Text = hasCaptureArea ? "Area set" : "Not set";
+        CaptureAreaStatusText.Text = hasCaptureArea ? "Full screen" : "Unavailable";
         CaptureAreaDot.Fill = GetThemeBrush(hasCaptureArea ? "EarningsGreenBrush" : "WarningGoldBrush");
         CompactCaptureReadyDot.Fill = GetThemeBrush(hasCaptureArea ? "EarningsGreenBrush" : "WarningGoldBrush");
-        CompactCaptureReadyText.Text = hasCaptureArea ? "AREA READY" : "AREA REQUIRED";
+        CompactCaptureReadyText.Text = hasCaptureArea ? "FULL SCREEN" : "DISPLAY UNAVAILABLE";
         ScannerCollapsedStatusText.Text =
             $"{(automaticDetectionEnabled ? "Automatic detection active" : "Scanner idle")}  •  " +
             (hasCaptureArea ? "Capture area ready" : "No capture area");
@@ -2691,11 +2586,7 @@ public partial class MainWindow : Window
         SettingsScrollViewer.Visibility = _selectedTab == "Settings"
             ? Visibility.Visible
             : Visibility.Collapsed;
-        DashboardTabButton.Style = (Style)FindResource(
-            _selectedTab == "Dashboard" ? "NavigationTabButtonActive" : "NavigationTabButton");
-        SettingsTabButton.Style = (Style)FindResource(
-            _selectedTab == "Settings" ? "NavigationTabButtonActive" : "NavigationTabButton");
-        MoveNavigationBubble(_selectedTab == "Settings", animate: false);
+        UpdatePageNavigation();
 
         if (saveSelection)
         {
@@ -2728,9 +2619,7 @@ public partial class MainWindow : Window
                 var distance = Math.Max(1, ExpandedDashboard.ActualWidth);
                 incomingTransform.X = distance * direction;
                 ExpandedDashboard.IsHitTestVisible = false;
-                MoveNavigationBubble(movingToSettings, animate: true);
-                DashboardTabButton.Style = (Style)FindResource(movingToSettings ? "NavigationTabButton" : "NavigationTabButtonActive");
-                SettingsTabButton.Style = (Style)FindResource(movingToSettings ? "NavigationTabButtonActive" : "NavigationTabButton");
+                UpdatePageNavigation();
                 var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
                 var duration = TimeSpan.FromMilliseconds(SystemParameters.ClientAreaAnimation ? 360 : 1);
@@ -2753,10 +2642,7 @@ public partial class MainWindow : Window
                 incomingTransform.X = 0;
                 _selectedTab = targetTab;
                 _captureSettings.LastSelectedTab = targetTab;
-                DashboardTabButton.Style = (Style)FindResource(
-                    targetTab == "Dashboard" ? "NavigationTabButtonActive" : "NavigationTabButton");
-                SettingsTabButton.Style = (Style)FindResource(
-                    targetTab == "Settings" ? "NavigationTabButtonActive" : "NavigationTabButton");
+                UpdatePageNavigation();
             }
         }
         finally
@@ -2766,35 +2652,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private void NavigationTrack_SizeChanged(object sender, SizeChangedEventArgs e)
+    private void UpdatePageNavigation()
     {
-        MoveNavigationBubble(_selectedTab == "Settings", animate: false);
-    }
-
-    private void MoveNavigationBubble(bool settings, bool animate)
-    {
-        if (NavigationBubble is null) return;
-        var width = NavigationTrack.ActualWidth / 2;
-        NavigationBubble.Width = width;
-        var target = settings ? width : 0;
-        var start = NavigationBubbleTranslate.X;
-        NavigationBubbleTranslate.BeginAnimation(TranslateTransform.XProperty, null);
-        NavigationBubbleTranslate.X = target;
-        NavigationBubbleScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-        NavigationBubbleScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-        if (!animate || !SystemParameters.ClientAreaAnimation) return;
-        NavigationBubbleTranslate.BeginAnimation(TranslateTransform.XProperty,
-            new DoubleAnimation(start, target, TimeSpan.FromMilliseconds(360))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }, FillBehavior = FillBehavior.Stop });
-        // A slight elastic stretch makes the pill feel fluid without overshooting the tabs.
-        foreach (var (property, peak) in new[] { (ScaleTransform.ScaleXProperty, 1.08), (ScaleTransform.ScaleYProperty, 0.94) })
-        {
-            var pulse = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(360), FillBehavior = FillBehavior.Stop };
-            pulse.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            pulse.KeyFrames.Add(new EasingDoubleKeyFrame(peak, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(150)), new SineEase()));
-            pulse.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(360)), new SineEase()));
-            NavigationBubbleScale.BeginAnimation(property, pulse);
-        }
+        SettingsBackButton.Visibility = _selectedTab == "Settings" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private System.Windows.Controls.ScrollViewer GetSelectedScrollViewer()
@@ -2966,16 +2826,16 @@ public partial class MainWindow : Window
 
     private async void GlobalHotkeyService_HotkeyPressed(object? sender, EventArgs e)
     {
-        if (_isSelectingCaptureArea || _isClosing)
+        if (_isClosing)
         {
             return;
         }
 
-        if (!HasConfirmedCaptureArea())
+        if (!HasUsableScreen())
         {
             ShowExistingMainWindow();
             ShowCaptureSetupState();
-            ShowQuickCaptureStatusNotification("Select a payout area before using the Quick Scan shortcut.");
+            ShowQuickCaptureStatusNotification("Primary display unavailable.");
             return;
         }
 
@@ -3053,7 +2913,7 @@ public partial class MainWindow : Window
 
         if (_resumeLivePreviewAfterShow &&
             LivePreviewCheckBox.IsChecked == true &&
-            HasConfirmedCaptureArea())
+            HasUsableScreen())
         {
             _resumeLivePreviewAfterShow = false;
             _livePreviewTimer.Start();
@@ -3893,7 +3753,7 @@ public partial class MainWindow : Window
         _isCompactMode = isCompactMode;
         ExpandedDashboard.Visibility = isCompactMode ? Visibility.Collapsed : Visibility.Visible;
         CompactDashboard.Visibility = isCompactMode ? Visibility.Visible : Visibility.Collapsed;
-        NavigationBar.Visibility = isCompactMode ? Visibility.Collapsed : Visibility.Visible;
+
         CompactModeTitleButton.Visibility = isCompactMode ? Visibility.Collapsed : Visibility.Visible;
         ExpandedModeTitleButton.Visibility = isCompactMode ? Visibility.Visible : Visibility.Collapsed;
         ExpandedTitleSubtitle.Visibility = isCompactMode ? Visibility.Collapsed : Visibility.Visible;

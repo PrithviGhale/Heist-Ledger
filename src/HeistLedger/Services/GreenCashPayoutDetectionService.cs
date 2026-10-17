@@ -15,6 +15,7 @@ namespace GTAEarningsTracker.Services;
 /// </summary>
 public sealed class GreenCashPayoutDetectionService
 {
+    public static Int32Rect? LocateFullScreenIcon(BitmapSource source) => FindGreenCashIcon(source, true)?.Bounds;
     private static readonly Regex LeadingPlusRegex = new(
         @"^\s*\+\s*",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -29,7 +30,7 @@ public sealed class GreenCashPayoutDetectionService
 
     public PayoutAnalysisResult? Analyze(
         IReadOnlyList<BitmapSource> frames,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool fullScreen = false)
     {
         ArgumentNullException.ThrowIfNull(frames);
         if (frames.Count == 0)
@@ -38,13 +39,14 @@ public sealed class GreenCashPayoutDetectionService
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var icon = FindGreenCashIcon(frames[0]);
+        var icon = FindGreenCashIcon(frames[0], fullScreen);
         if (icon is null)
         {
             return null;
         }
 
         var cropBounds = CreateAmountCrop(icon.Bounds, frames[0]);
+        if (fullScreen) cropBounds = TrimTrailingDesktop(frames[0], cropBounds, icon.Bounds.Height);
         if (cropBounds.Width < 40 || cropBounds.Height < 24)
         {
             return null;
@@ -353,7 +355,7 @@ public sealed class GreenCashPayoutDetectionService
         return gaps.All(gap => gap >= 0 && gap <= averageWidth * 0.75);
     }
 
-    private static GreenIconObservation? FindGreenCashIcon(BitmapSource source)
+    private static GreenIconObservation? FindGreenCashIcon(BitmapSource source, bool fullScreen = false)
     {
         var bitmap = ConvertToBgra32(source);
         var width = bitmap.PixelWidth;
@@ -361,7 +363,7 @@ public sealed class GreenCashPayoutDetectionService
         var stride = checked(width * 4);
         var pixels = new byte[checked(stride * height)];
         bitmap.CopyPixels(pixels, stride, 0);
-        var searchWidth = Math.Max(1, (int)Math.Round(width * 0.52));
+        var searchWidth = Math.Max(1, (int)Math.Round(width * (fullScreen ? 1 : 0.52)));
         var mask = new bool[checked(searchWidth * height)];
         for (var y = 0; y < height; y++)
         {
@@ -380,7 +382,7 @@ public sealed class GreenCashPayoutDetectionService
         var visited = new bool[mask.Length];
         var queue = new int[mask.Length];
         var candidates = new List<GreenIconObservation>();
-        var minimumDiameter = Math.Max(36, (int)Math.Round(height * 0.24));
+        var minimumDiameter = Math.Max(36, (int)Math.Round(height * (fullScreen ? 0.025 : 0.24)));
         var maximumDiameter = Math.Max(minimumDiameter, Math.Min(height, (int)Math.Round(width * 0.45)));
         for (var index = 0; index < mask.Length; index++)
         {
@@ -680,6 +682,28 @@ public sealed class GreenCashPayoutDetectionService
             top + 1,
             source.PixelHeight);
         return new Int32Rect(left, top, source.PixelWidth - left, bottom - top);
+    }
+
+    private static Int32Rect TrimTrailingDesktop(BitmapSource source, Int32Rect bounds, int diameter)
+    {
+        var crop = ConvertToBgra32(new CroppedBitmap(source, bounds));
+        var stride = crop.PixelWidth * 4;
+        var pixels = new byte[stride * crop.PixelHeight];
+        crop.CopyPixels(pixels, stride, 0);
+        var last = -1;
+        for (var x = 0; x < crop.PixelWidth; x++)
+        {
+            var count = 0;
+            for (var y = 0; y < crop.PixelHeight; y++)
+            {
+                var i = y * stride + x * 4;
+                if (Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2])) >= 145) count++;
+            }
+            if (count >= Math.Max(6, diameter * 0.10)) last = x;
+            else if (last >= 0 && x - last > diameter * 0.45) break;
+        }
+        return last < diameter / 2 ? bounds : new Int32Rect(bounds.X, bounds.Y,
+            Math.Min(bounds.Width, last + Math.Max(12, diameter / 12)), bounds.Height);
     }
 
     private static IReadOnlyList<int> SelectFrameIndexes(int frameCount)

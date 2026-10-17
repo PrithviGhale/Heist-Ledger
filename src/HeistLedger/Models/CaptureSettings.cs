@@ -12,7 +12,8 @@ public enum ScannerDetectionMode
 public enum ScannerAreaMode
 {
     AutoLocate,
-    SelectedRegion
+    SelectedRegion,
+    FullScreen
 }
 
 public sealed class CaptureSettings
@@ -65,7 +66,7 @@ public sealed class CaptureSettings
 
     public ScannerDetectionMode DetectionMode { get; set; } = ScannerDetectionMode.Fast;
 
-    public ScannerAreaMode AreaMode { get; set; } = ScannerAreaMode.SelectedRegion;
+    public ScannerAreaMode AreaMode { get; set; } = ScannerAreaMode.FullScreen;
 
     public string QuickCaptureMonitorId { get; set; } = "Primary";
 
@@ -74,6 +75,8 @@ public sealed class CaptureSettings
     public string LastSelectedTab { get; set; } = "Dashboard";
 
     public bool CheckForUpdatesOnStartup { get; set; } = true;
+
+    public string? KnownUpdateVersion { get; set; }
 
     [JsonIgnore]
     public bool HasCaptureArea => Width > 0 && Height > 0;

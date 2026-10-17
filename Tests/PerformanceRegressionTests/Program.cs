@@ -197,11 +197,11 @@ internal static class Program
                 Element("LoadingOverlay").Visibility = intro ? Visibility.Visible : Visibility.Collapsed;
                 Element("ExpandedDashboard").Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
                 Element("CompactDashboard").Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
-                Element("NavigationBar").Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
                 Element("CompactNormalPanel").Visibility = mode == "confirmation" ? Visibility.Collapsed : Visibility.Visible;
                 Element("CompactPendingIndicator").Visibility = mode == "confirmation" ? Visibility.Visible : Visibility.Collapsed;
                 Element("MainScrollViewer").Visibility = mode == "settings" ? Visibility.Collapsed : Visibility.Visible;
                 Element("SettingsScrollViewer").Visibility = mode == "settings" ? Visibility.Visible : Visibility.Collapsed;
+                Element("SettingsUpdateBadge").Visibility = mode == "settings" ? Visibility.Visible : Visibility.Collapsed;
                 ((TextBlock)Element("DayTotalText")).Text = "$12,418,670";
                 ((TextBlock)Element("CompactPendingText")).Text = "$1,818,663";
                 var size = compact
@@ -210,6 +210,11 @@ internal static class Program
                 host.Measure(size);
                 host.Arrange(new Rect(size));
                 host.UpdateLayout();
+                if (mode == "settings")
+                {
+                    var settingsViewer = (ScrollViewer)Element("SettingsScrollViewer");
+                    Assert(settingsViewer.ExtentWidth <= settingsViewer.ViewportWidth + 1, "settings must not overflow horizontally");
+                }
                 host.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
                 var expectedAccent = (SolidColorBrush)app.Resources["EarningsGreenBrush"];
                 var actualAccent = (SolidColorBrush)((TextBlock)Element("DayTotalText")).Foreground;
@@ -260,7 +265,7 @@ internal static class Program
             var frame = new DispatcherFrame();
             var timeout = Stopwatch.StartNew();
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
-            timer.Tick += (_, _) => { if (task.IsCompleted || timeout.Elapsed > TimeSpan.FromSeconds(5)) frame.Continue = false; };
+            timer.Tick += (_, _) => { host.UpdateLayout(); if (task.IsCompleted || timeout.Elapsed > TimeSpan.FromSeconds(5)) frame.Continue = false; };
             timer.Start();
             Dispatcher.PushFrame(frame);
             timer.Stop();
@@ -270,6 +275,16 @@ internal static class Program
         // Invoke presentation-only methods on the detached visual; never show the
         // window, run startup, or call handlers that persist personal settings.
         Invoke("ApplyWindowMode", false, true);
+        var screen = new ScreenCaptureService().GetPrimaryScreenBounds();
+        var capture = (CaptureSettings)Invoke("GetAutomaticCaptureArea")!;
+        Assert(capture.X == screen.X && capture.Y == screen.Y && capture.Width == screen.Width && capture.Height == screen.Height,
+            "Quick Scan defaults to the full native primary display without a saved selection");
+        Invoke("SetUpdateNotification", "9.0.0");
+        Assert(((FrameworkElement)window.FindName("SettingsUpdateBadge")).Visibility == Visibility.Visible,
+            "newer update displays a Settings notification");
+        Invoke("SetUpdateNotification", "1.0.0");
+        Assert(((FrameworkElement)window.FindName("SettingsUpdateBadge")).Visibility == Visibility.Collapsed,
+            "installed or older updates clear the notification");
         Invoke("SelectTab", "Dashboard", false);
         host.Measure(new Size(500, 760));
         host.Arrange(new Rect(0, 0, 500, 760));
@@ -282,10 +297,14 @@ internal static class Program
         Assert(home.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed,
             "rapid tab requests settle on the last selected page");
         Pump((Task)Invoke("SelectTabAnimatedAsync", "Settings")!);
-        var pill = (System.Windows.Media.TranslateTransform)window.FindName("NavigationBubbleTranslate");
-        var track = (Grid)window.FindName("NavigationTrack");
-        Assert(settings.Visibility == Visibility.Visible && Math.Abs(pill.X - track.ActualWidth / 2) < 1,
-            "navigation pill and visible page agree after sliding");
+        Assert(settings.Visibility == Visibility.Visible && ((FrameworkElement)window.FindName("SettingsBackButton")).Visibility == Visibility.Visible,
+            "settings page exposes back navigation after sliding");
+        GTAEarningsTracker.Behaviors.SmoothScrollBehavior.ScrollTo(settings, 300);
+        Pump(Task.Delay(260));
+        Assert(Math.Abs(settings.VerticalOffset - 300) < 2, "smooth settings navigation reaches its target");
+        settings.ScrollToVerticalOffset(40);
+        Pump(Task.Delay(80));
+        Assert(Math.Abs(settings.VerticalOffset - 40) < 2, "finished scrolling releases its clock and leaves native scrolling usable");
         for (var index = 0; index < 2; index++)
         {
             Pump((Task)Invoke("AnimateWindowSizeAsync", 420d, 365d, true)!);
@@ -298,7 +317,7 @@ internal static class Program
             Assert(((Image)window.FindName("ModeTransitionPreview")).Source is null,
                 "resize snapshot is released after the single transition");
         }
-        Console.WriteLine("PASS: queued tab changes, moving navigation pill, repeated compact/full transitions and animation cleanup");
+        Console.WriteLine("PASS: header settings/back navigation, smooth scrolling, update badge, compact/full transitions and animation cleanup");
     }
 
     private static void Flush(Window window)

@@ -8,6 +8,10 @@ Install `HeistLedger-win-Setup.exe` once and launch Heist Ledger using its insta
 
 Settings > App Updates shows the installed version, optional startup checking, a manual check, plain-text release notes, and download progress. Downloading and installing are separate actions. A completed download is retained for a later restart, but nothing is automatically applied on launch. Install & Restart runs the normal WPF shutdown cleanup and refuses to interrupt a scan or unconfirmed payout.
 
+Open Settings with the header gear; use Back to Home to return. When a check discovers a newer version, the gear displays a static `!` badge and Settings shows an update status pill. The known version is saved locally so the badge survives an offline launch. Installing that version, or a successful check reporting no newer release, clears it. This is an availability indicator rather than an unread-message badge: merely opening Settings does not dismiss it.
+
+Settings includes shortcuts to Updates, Profile, Style, Quick Scan, and Discord. Mouse-wheel and section navigation use brief scrolling animations that release their clocks when finished. Scrollbar dragging, keyboard navigation, nested text/notes areas, and reduced-animation preferences retain their normal behavior. The badge does not pulse and the page adds no polling timer or continuous animation.
+
 When internet access fails, the app stays usable. Retry in Settings later. Cancelled, incomplete, or checksum-invalid packages are never offered for installation. GitHub checks use the public API and are subject to shared-IP rate limits, so startup checks occur only once per app launch; there is no polling loop.
 
 ## Building the installer

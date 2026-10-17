@@ -1,6 +1,6 @@
 # Heist Ledger
 
-Heist Ledger is a standalone Windows companion for tracking GTA Online earnings. It supports manual entries and user-triggered Quick Scan OCR while reading only the visible screen region selected by the user. It does not access the GTA process, automate input, modify game files, or interact with anti-cheat software.
+Heist Ledger is a standalone Windows companion for tracking GTA Online earnings. It supports manual entries and user-triggered Quick Scan OCR of the visible primary display. It does not access the GTA process, automate input, modify game files, or interact with anti-cheat software.
 
 ## Download
 
@@ -15,7 +15,7 @@ User earnings and settings are stored under `%LocalAppData%\GTAEarningsTracker`.
 ## Features
 
 - Manual payout entry with rolling 24-hour and 7-day totals
-- User-selected visible screen region for passive Quick Scan OCR
+- Automatic primary-display capture with local payout-region discovery for Quick Scan OCR
 - Green cash-icon payout detection alongside Total Cash Earned result-screen detection
 - Three-reader OCR verification using Tesseract, local PaddleOCR AI, and a GTA-specific digit reader
 - Rockstar-font preprocessing and segmented digit recovery for difficult payout overlays
@@ -24,7 +24,7 @@ User earnings and settings are stored under `%LocalAppData%\GTAEarningsTracker`.
 - Captured payout preview while manually editing an amount
 - Repeated rescanning and saving of the same visible payout without duplicate suppression
 - Compact always-on-top overlay and six visual themes
-- Smooth compact/expanded transitions, sliding pages, and a moving navigation highlight
+- Smooth compact/expanded transitions, sliding pages, a header Settings gear, and an update badge
 - Built-in update checking, release notes, cancellable downloads, and explicit install/restart in updater-enabled installations
 - Lower idle CPU usage and faster capture bursts with reusable native capture resources
 - Persistent session countdowns, earning calendar, and per-entry history deletion
@@ -55,4 +55,4 @@ Build and test instructions are in [docs/BUILDING.md](docs/BUILDING.md). Release
 
 ## Safety
 
-Heist Ledger does not read game memory, inspect GTA processes, inject DLLs, hook DirectX, modify game files, automate input, or interact with BattlEye. Quick Scan analyzes only visible pixels inside the region selected by the user.
+Heist Ledger does not read game memory, inspect GTA processes, inject DLLs, hook DirectX, modify game files, automate input, or interact with BattlEye. Quick Scan analyzes visible pixels from the primary display and requires manual confirmation.

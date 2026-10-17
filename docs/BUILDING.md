@@ -27,6 +27,12 @@ dotnet run --project Tests\DiscordWebhookSmokeTests\DiscordWebhookSmokeTests.csp
 
 The screenshot fixtures under `Tests/Fixtures` are regression inputs. They are not copied into the published application.
 
+For payouts embedded in a 2560×1440 desktop-sized image (automatic region location and full-screen green-icon detection):
+
+```powershell
+dotnet run --project Tests\GeneratedQuickCaptureTests -c Release -- --fullscreen
+```
+
 For offscreen layout checks across all themes at 100%, 125%, and 150% rendering scale:
 
 ```powershell

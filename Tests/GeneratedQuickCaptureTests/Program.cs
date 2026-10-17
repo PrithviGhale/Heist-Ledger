@@ -21,6 +21,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         var generatedOnly = args.Contains("--generated-only", StringComparer.OrdinalIgnoreCase);
+        if (args.Contains("--fullscreen", StringComparer.OrdinalIgnoreCase)) return RunFullScreenTests();
         var referenceOnly = args.Contains("--reference-only", StringComparer.OrdinalIgnoreCase);
         var userImagesOnly = args.Contains("--user-images-only", StringComparer.OrdinalIgnoreCase);
         var greenImagesOnly = args.Contains("--green-images-only", StringComparer.OrdinalIgnoreCase);
@@ -548,7 +549,7 @@ internal static class Program
             !legacySettings.ContinueScannerWhileHidden ||
             !legacySettings.ShowTrayNotificationAfterPayout ||
             legacySettings.DetectionMode != ScannerDetectionMode.Fast ||
-            legacySettings.AreaMode != ScannerAreaMode.SelectedRegion ||
+            legacySettings.AreaMode != ScannerAreaMode.FullScreen ||
             legacySettings.CaptureAreaConfirmed ||
             !legacySettings.RequireQuickCaptureConfirmation ||
             legacySettings.QuickCaptureMonitorId != "Primary")
@@ -566,7 +567,7 @@ internal static class Program
             AreaMode = ScannerAreaMode.AutoLocate
         };
         var migrated = CaptureSettingsService.Migrate(legacyAutoLocate);
-        if (migrated.AreaMode != ScannerAreaMode.SelectedRegion ||
+        if (migrated.AreaMode != ScannerAreaMode.FullScreen ||
             migrated.X != 10 || migrated.Y != 20 || migrated.Width != 300 || migrated.Height != 100 ||
             migrated.CaptureAreaConfirmed || !migrated.RequireQuickCaptureConfirmation)
         {
@@ -967,6 +968,67 @@ internal static class Program
         bitmap.Freeze();
         return bitmap;
     }
+
+    private static int RunFullScreenTests()
+    {
+        using var general = new OcrService();
+        using var heading = new OcrService(OcrWorkerKind.Heading);
+        using var amount = new OcrService(OcrWorkerKind.Amount);
+        using var detector = new PayoutDetectionService(new ImagePreprocessingService(), general, heading, amount);
+        using var paddle = new PaddleOcrRecognitionService();
+        var reader = new GtaLargeDigitReaderService(detector, amount, paddle);
+        var green = new GreenCashPayoutDetectionService(amount);
+        var cases = new[]
+        {
+            ("TestSamples", "GtaTotalCashEarnedReference.png", 12_418_670m),
+            ("TestSamples", "GtaAmountMisread_1818663.png", 1_818_663m),
+            ("TestSamples", "UserTest1.png", 968_000m),
+            ("TestSamples", "UserTest2.png", 1_413_716m),
+            ("TestSamples", "UserTest3.png", 968_000m),
+            ("TestSamples", "UserTest4.png", 2_538_000m),
+            ("TestSamples", "UserTest5.png", 3_615_920m),
+            ("TestSamples", "UserTest8.png", 1_188_830m),
+            ("TestSamples", "UserTest9.png", 864_000m),
+            ("TestSamples", "UserTest10.png", 13_875_000m),
+            ("TestSamples", "UserTest11.png", 3_485_830m),
+            ("TestSamples", "UserTest12.png", 2_491_190m),
+            ("TestSamples", "UserTest13.png", 2_540_540m),
+            ("GreenCashSamples", "GreenCash1646400.png", 1_646_400m),
+            ("GreenCashSamples", "GreenCash1100000.png", 1_100_000m),
+            ("GreenCashSamples", "GreenCash5586000.png", 5_586_000m),
+            ("GreenCashSamples", "GreenCash1293600.png", 1_293_600m),
+            ("GreenCashSamples", "GreenCash500000.png", 500_000m),
+            ("GreenCashSamples", "GreenCash2000000.png", 2_000_000m),
+            ("GreenCashSamples", "GreenCash2500000.png", 2_500_000m)
+        };
+        var failures = 0;
+        foreach (var (folder, name, expected) in cases)
+        {
+            var source = LoadImage(Path.Combine(AppContext.BaseDirectory, folder, name));
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen())
+            {
+                drawing.DrawRectangle(new SolidColorBrush(Color.FromRgb(12, 18, 24)), null, new Rect(0, 0, 2560, 1440));
+                var scale = Math.Min(1, 2280d / source.PixelWidth);
+                var width = source.PixelWidth * scale;
+                var height = source.PixelHeight * scale;
+                drawing.DrawImage(source, new Rect(140, 360, width, height));
+            }
+            var screen = new RenderTargetBitmap(2560, 1440, 96, 96, PixelFormats.Pbgra32);
+            screen.Render(visual);
+            screen.Freeze();
+            var region = detector.LocateFullScreenResult(screen, CancellationToken.None);
+            var frames = FullScreenScanService.CropFrames(Enumerable.Repeat<BitmapSource>(screen, 5), region);
+            var result = (region is null ? green.Analyze(frames, CancellationToken.None, fullScreen: true) : null) ??
+                reader.Analyze(frames, ScannerDetectionMode.Fast, CancellationToken.None, forceTargetedVerification: true).Analysis;
+            Console.WriteLine($"Full-screen {name}: expected={expected}; actual={result.Candidate?.Amount}");
+            if (result.Candidate?.Amount != expected) Console.WriteLine($"  region={region}; icon={GreenCashPayoutDetectionService.LocateFullScreenIcon(screen)}");
+            if (result.Candidate?.Amount != expected) failures++;
+        }
+        Console.WriteLine(failures == 0 ? "All full-screen payout tests passed." : $"{failures} full-screen tests failed.");
+        return failures == 0 ? 0 : 1;
+    }
+
 
     private static BitmapSource LoadImage(string path)
     {

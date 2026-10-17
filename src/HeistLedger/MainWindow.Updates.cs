@@ -15,6 +15,7 @@ public partial class MainWindow
     {
         CurrentAppVersionText.Text = $"Heist Ledger v{AppUpdateService.CurrentVersion}";
         CheckUpdatesOnStartupCheckBox.IsChecked = _captureSettings.CheckForUpdatesOnStartup;
+        SetUpdateNotification(_captureSettings.KnownUpdateVersion);
         try
         {
             if (!_appUpdateService.IsInstalled)
@@ -55,6 +56,8 @@ public partial class MainWindow
             var update = await Task.Run(() => _appUpdateService.CheckAsync(_shutdownCancellation.Token));
             if (_isClosing) return;
             _hasAvailableUpdate = update is not null;
+            SetUpdateNotification(update?.Version);
+            await SaveSettingsQuietlyAsync();
             UpdateAvailableBanner.Visibility = update is null ? Visibility.Collapsed : Visibility.Visible;
             DownloadAppUpdateButton.Visibility = update is null ? Visibility.Collapsed : Visibility.Visible;
             AppUpdateNotesExpander.Visibility = update is null ? Visibility.Collapsed : Visibility.Visible;
@@ -82,6 +85,7 @@ public partial class MainWindow
 
     private void ShowReadyUpdate(string version)
     {
+        SetUpdateNotification(version);
         AppUpdateStatusText.Text = $"Version {version} is downloaded and verified. Restart when you're ready.";
         DownloadAppUpdateButton.Content = "INSTALL & RESTART";
         DownloadAppUpdateButton.Visibility = Visibility.Visible;
