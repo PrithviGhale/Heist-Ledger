@@ -699,10 +699,9 @@ public sealed class GreenCashPayoutDetectionService
                 var i = y * stride + x * 4;
                 // GTA's translucent trailing zeros can be dark gray. Keep
                 // those pixels rather than trimming at the brightest digits.
-                if (Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2])) >= 58) count++;
+                if (Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2])) >= 32) count++;
             }
-            if (count >= Math.Max(6, diameter * 0.10)) last = x;
-            else if (last >= 0 && x - last > diameter * 0.45) break;
+            if (count >= Math.Max(2, diameter * 0.02)) last = x;
         }
         return last < diameter / 2 ? bounds : new Int32Rect(bounds.X, bounds.Y,
             Math.Min(bounds.Width, last + Math.Max(12, diameter / 12)), bounds.Height);

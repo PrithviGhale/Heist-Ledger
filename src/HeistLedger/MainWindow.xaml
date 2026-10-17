@@ -290,7 +290,7 @@
                                     <Ellipse x:Name="LiveScannerDot" Width="8" Height="8" Fill="{DynamicResource MutedTextBrush}" />
                                     <StackPanel Grid.Column="2">
                                         <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="QUICK SCAN" />
-                                        <TextBlock x:Name="LiveScannerStatusText" Margin="0,2,0,0" FontSize="10" Text="Select area" />
+                                        <TextBlock x:Name="LiveScannerStatusText" Margin="0,2,0,0" FontSize="10" Text="Quick Scan ready" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -319,8 +319,8 @@
                                     </Grid.ColumnDefinitions>
                                     <Ellipse x:Name="CaptureAreaDot" Width="8" Height="8" Fill="{DynamicResource WarningGoldBrush}" />
                                     <StackPanel Grid.Column="2">
-                                        <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="CAPTURE AREA" />
-                                        <TextBlock x:Name="CaptureAreaStatusText" Margin="0,2,0,0" FontSize="10" Text="Not set" />
+                                        <TextBlock Style="{DynamicResource MicroLabel}" FontSize="9" Text="DISPLAY" />
+                                        <TextBlock x:Name="CaptureAreaStatusText" Margin="0,2,0,0" FontSize="10" Text="Primary" />
                                     </StackPanel>
                                 </Grid>
                             </Border>

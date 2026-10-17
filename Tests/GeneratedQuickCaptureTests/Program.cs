@@ -21,7 +21,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         var generatedOnly = args.Contains("--generated-only", StringComparer.OrdinalIgnoreCase);
-        if (args.Contains("--fullscreen", StringComparer.OrdinalIgnoreCase)) return RunFullScreenTests();
+        if (args.Contains("--fullscreen", StringComparer.OrdinalIgnoreCase)) return RunFullScreenTests(args.FirstOrDefault(x => x.StartsWith("--full-case="))?[12..]);
         var referenceOnly = args.Contains("--reference-only", StringComparer.OrdinalIgnoreCase);
         var userImagesOnly = args.Contains("--user-images-only", StringComparer.OrdinalIgnoreCase);
         var greenImagesOnly = args.Contains("--green-images-only", StringComparer.OrdinalIgnoreCase);
@@ -969,7 +969,7 @@ internal static class Program
         return bitmap;
     }
 
-    private static int RunFullScreenTests()
+    private static int RunFullScreenTests(string? filter = null)
     {
         using var general = new OcrService();
         using var heading = new OcrService(OcrWorkerKind.Heading);
@@ -1002,27 +1002,40 @@ internal static class Program
             ("GreenCashSamples", "GreenCash2500000.png", 2_500_000m)
         };
         var failures = 0;
-        foreach (var (folder, name, expected) in cases)
+        foreach (var (folder, name, expected) in cases.Where(x => filter is null || x.Item2.Contains(filter, StringComparison.OrdinalIgnoreCase)))
         {
             var source = LoadImage(Path.Combine(AppContext.BaseDirectory, folder, name));
+            // Desktop captures preserve native pixels. Surround each real fixture
+            // with extra desktop context without resampling or clipping it.
+            var canvasWidth = Math.Max(2560, source.PixelWidth + 280);
+            var canvasHeight = Math.Max(1440, source.PixelHeight + 440);
             var visual = new DrawingVisual();
             using (var drawing = visual.RenderOpen())
             {
-                drawing.DrawRectangle(new SolidColorBrush(Color.FromRgb(12, 18, 24)), null, new Rect(0, 0, 2560, 1440));
-                var scale = Math.Min(1, Math.Min(2280d / source.PixelWidth, 1000d / source.PixelHeight));
+                drawing.DrawRectangle(new SolidColorBrush(Color.FromRgb(12, 18, 24)), null, new Rect(0, 0, canvasWidth, canvasHeight));
+                var scale = 1d;
                 var width = source.PixelWidth * scale;
                 var height = source.PixelHeight * scale;
                 drawing.DrawImage(source, new Rect(140, 360, width, height));
             }
-            var screen = new RenderTargetBitmap(2560, 1440, 96, 96, PixelFormats.Pbgra32);
+            var screen = new RenderTargetBitmap(canvasWidth, canvasHeight, 96, 96, PixelFormats.Pbgra32);
             screen.Render(visual);
             screen.Freeze();
-            var region = detector.LocateFullScreenResult(screen, CancellationToken.None);
+            var region = FullScreenScanService.FindUniformViewport(screen, CancellationToken.None);
             var frames = FullScreenScanService.CropFrames(Enumerable.Repeat<BitmapSource>(screen, 5), region);
-            var result = (region is null ? green.Analyze(frames, CancellationToken.None, fullScreen: true) : null) ??
+            var hasTotal = detector.LocateFullScreenResult(frames[0], CancellationToken.None) is not null;
+            var result = (!hasTotal ? green.Analyze(frames, CancellationToken.None, fullScreen: true) : null) ??
                 reader.Analyze(frames, ScannerDetectionMode.Fast, CancellationToken.None, forceTargetedVerification: true).Analysis;
             Console.WriteLine($"Full-screen {name}: expected={expected}; actual={result.Candidate?.Amount}");
-            if (result.Candidate?.Amount != expected) Console.WriteLine($"  region={region}; icon={GreenCashPayoutDetectionService.LocateFullScreenIcon(screen)}");
+            if (result.Candidate?.Amount != expected)
+            {
+                Console.WriteLine($"  region={region}; icon={GreenCashPayoutDetectionService.LocateFullScreenIcon(screen)}; confidence={result.Confidence}; readers={result.GtaResultDiagnostics?.IndependentReaderAgreement}");
+                if (folder == "TestSamples")
+                {
+                    var broad = reader.Analyze(Enumerable.Repeat<BitmapSource>(screen, 5).ToArray(), ScannerDetectionMode.Fast, CancellationToken.None, forceTargetedVerification: true).Analysis;
+                    Console.WriteLine($"  broad={broad.Candidate?.Amount}; confidence={broad.Confidence}; readers={broad.GtaResultDiagnostics?.IndependentReaderAgreement}");
+                }
+            }
             if (result.Candidate?.Amount != expected) failures++;
         }
         Console.WriteLine(failures == 0 ? "All full-screen payout tests passed." : $"{failures} full-screen tests failed.");

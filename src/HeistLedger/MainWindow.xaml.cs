@@ -803,9 +803,10 @@ public partial class MainWindow : Window
             }
 
             SetQuickScanState("Finding payout…", "ANALYZING…");
-            var resultRegion = await Task.Run(() => _payoutDetectionService.LocateFullScreenResult(frames[0], cancellationToken), cancellationToken);
+            var resultRegion = await Task.Run(() => FullScreenScanService.FindUniformViewport(frames[0], cancellationToken), cancellationToken);
             frames = await Task.Run(() => FullScreenScanService.CropFrames(frames, resultRegion), cancellationToken);
-            var greenIconAnalysis = resultRegion is not null ? null : await Task.Run(
+            var hasTotalAnchor = await Task.Run(() => _payoutDetectionService.LocateFullScreenResult(frames[0], cancellationToken) is not null, cancellationToken);
+            var greenIconAnalysis = hasTotalAnchor ? null : await Task.Run(
                 () => _greenCashPayoutDetectionService.Analyze(frames, cancellationToken, fullScreen: true), cancellationToken);
             var selectedResult = greenIconAnalysis is not null
                 ? new BurstPayoutAnalysisResult(
